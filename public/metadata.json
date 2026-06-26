@@ -1,0 +1,8 @@
+{
+  "name": "Mobile Health",
+  "description": "An AI-powered Telemedicine platform that connects patients to hospitals, doctors, labs, and pharmacies. Features secure login, messaging, appointment scheduling, and an AI assistant.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
