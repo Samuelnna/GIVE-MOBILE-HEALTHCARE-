@@ -201,16 +201,55 @@ const App: React.FC = () => {
   };
 
   const processPayment = async (amount: number, callback: (flw_data: any) => void) => {
-    const fwPublicKey = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY;
+    // Check both potential environment variable names
+    const fwPublicKey = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY || process.env.FLUTTERWAVE_PUBLIC_KEY;
+    
+    console.log('App: Initializing Flutterwave with key:', fwPublicKey ? `${fwPublicKey.substring(0, 10)}...` : 'MISSING');
+    
     // @ts-ignore
-    if (!fwPublicKey || !window.FlutterwaveCheckout) { alert('Payment configuration or gateway missing.'); return; }
+    if (!fwPublicKey) { 
+        alert('Payment configuration missing. Please check your .env file.'); 
+        console.error('Flutterwave Public Key is missing in environment variables.');
+        return; 
+    }
+    
+    // @ts-ignore
+    if (!window.FlutterwaveCheckout) { 
+        alert('Payment gateway (Flutterwave) not loaded. Please refresh or check your connection.'); 
+        console.error('window.FlutterwaveCheckout is undefined.');
+        return; 
+    }
+
     setIsPaymentLoading(true);
     // @ts-ignore
     window.FlutterwaveCheckout({
-        public_key: fwPublicKey, tx_ref: `GIVE-${Date.now()}`, amount, currency: "NGN",
-        customer: { email: currentUser?.email || '', name: currentUser?.name || '' },
-        callback: (data: any) => { if (data.status === 'successful') callback(data); },
-        onclose: () => setIsPaymentLoading(false)
+        public_key: fwPublicKey,
+        tx_ref: `GIVE-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        amount: amount,
+        currency: "NGN",
+        payment_options: "card, banktransfer, ussd",
+        customer: {
+            email: currentUser?.email || 'customer@example.com',
+            name: currentUser?.name || 'Customer',
+        },
+        customizations: {
+            title: "GIVE Healthcare",
+            description: "Payment for medical services",
+            logo: "https://rkmqclayhjqeuyotxtbq.supabase.co/storage/v1/object/public/blog-images/logo.jpeg",
+        },
+        callback: (data: any) => {
+            console.log('App: Flutterwave callback received:', data);
+            if (data.status === 'successful' || data.status === 'completed' || data.charge_response_code === '00') {
+                callback(data);
+            } else {
+                console.warn('App: Payment status not successful:', data.status);
+                addNotification('Payment Unsuccessful', `Status: ${data.status}`, 'warning');
+            }
+        },
+        onclose: () => {
+            setIsPaymentLoading(false);
+            console.log('App: Payment modal closed.');
+        }
     });
   };
 
@@ -273,6 +312,7 @@ const App: React.FC = () => {
 
   return (
     <div className="bg-[#FAFBFC] min-h-screen font-sans text-slate-800">
+      <script src="https://checkout.flutterwave.com/v3.js" async></script>
       {initialLoading && <LoadingOverlay />}
       <Header user={currentUser} activeSection={activeSection} setActiveSection={setActiveSection} cartItems={cartItems} onCartClick={() => setIsCartOpen(true)} onLogout={handleLogout} />
       <main className="pt-16 sm:pt-20">
