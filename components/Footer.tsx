@@ -21,7 +21,6 @@ const Footer: React.FC = () => {
             <ul className="space-y-2 text-sm font-semibold">
               <li><a href="/about" className="text-slate-300 hover:text-white">About</a></li>
               <li><a href="/about#contact" className="text-slate-300 hover:text-white">Contact</a></li>
-              <li><a href="/" className="text-slate-300 hover:text-white">Open app</a></li>
             </ul>
           </div>
           <div>
