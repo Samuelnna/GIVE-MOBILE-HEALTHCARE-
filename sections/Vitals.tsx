@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import LineChart from '../components/LineChart';
 import { HeartIcon } from '../components/IconComponents';
 
@@ -9,9 +9,9 @@ const Vitals: React.FC = () => {
   const [newVital, setNewVital] = useState({ type: 'Heart Rate', value: '', unit: 'bpm' });
 
   const fetchVitals = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase.from('vitals').select('*').eq('patient_id', user.id).order('recorded_at', { ascending: true });
+    const userId = await getAuthedUserId();
+    if (!userId) return;
+    const { data } = await supabase.from('vitals').select('*').eq('patient_id', userId).order('recorded_at', { ascending: true });
     if (data) setVitals(data);
   };
 
@@ -37,9 +37,9 @@ const Vitals: React.FC = () => {
   }, [vitals]);
 
   const handleAdd = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { error } = await supabase.from('vitals').insert([{ ...newVital, patient_id: user.id, value: newVital.value.toString() }]);
+    const userId = await getAuthedUserId();
+    if (!userId) return;
+    const { error } = await supabase.from('vitals').insert([{ ...newVital, patient_id: userId, value: newVital.value.toString() }]);
     if (!error) {
         fetchVitals();
         setShowModal(false);

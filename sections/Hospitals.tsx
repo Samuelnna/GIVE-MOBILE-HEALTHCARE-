@@ -40,10 +40,10 @@ const HospitalCard: React.FC<{ hospital: Hospital; onDetailsClick: () => void }>
         <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded-full flex-shrink-0">Accredited</span>
       </div>
       <div className="flex flex-wrap gap-2 mb-4">
-        {hospital.specialties.slice(0, 3).map(spec => (
+        {hospital.specialties?.slice(0, 3).map(spec => (
           <span key={spec} className="bg-sky-100 text-sky-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">{spec}</span>
         ))}
-        {hospital.specialties.length > 3 && <span className="text-xs font-semibold text-slate-500">+ {hospital.specialties.length - 3} more</span>}
+        {(hospital.specialties?.length || 0) > 3 && <span className="text-xs font-semibold text-slate-500">+ {(hospital.specialties?.length || 0) - 3} more</span>}
       </div>
        {hospital.services && hospital.services.length > 0 && (
         <div className="mt-2 mb-4 pt-3 border-t border-slate-100 flex-grow">
@@ -72,26 +72,29 @@ const Hospitals: React.FC<HospitalsProps> = ({ onScheduleService, hospitals, ini
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [selectedHospital, setSelectedHospital] = useState<Hospital | null>(null);
   const [schedulingInfo, setSchedulingInfo] = useState<{ hospital: Hospital; service: HospitalService } | null>(null);
-  const [realHospitals, setRealHospitals] = useState<Hospital[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [realHospitals, setRealHospitals] = useState<Hospital[]>(hospitals || []);
+  const [loading, setLoading] = useState(!(hospitals && hospitals.length));
 
   const fetchHospitals = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('hospitals').select('*');
-    if (!error && data) {
-      setRealHospitals(data.map(h => ({
-        id: h.id,
-        name: h.name,
-        location: h.location,
-        specialties: h.specialties || ['General'],
-        rating: h.rating || 4.5,
-        imageUrl: h.imageUrl || `https://images.unsplash.com/photo-1587350859723-938e19f62fdd?auto=format&fit=crop&q=80&w=600&h=400`,
-        services: h.services || [
-          { name: 'General Consultation', description: 'Standard medical checkup.' }
-        ]
-      })));
+    if (!(hospitals && hospitals.length) && realHospitals.length === 0) setLoading(true);
+    try {
+      const { data, error } = await supabase.from('hospitals').select('*');
+      if (!error && data) {
+        setRealHospitals(data.map(h => ({
+          id: h.id,
+          name: h.name,
+          location: h.location,
+          specialties: h.specialties || ['General'],
+          rating: h.rating || 4.5,
+          imageUrl: h.imageUrl || h.image_url || `https://images.unsplash.com/photo-1587350859723-938e19f62fdd?auto=format&fit=crop&q=80&w=600&h=400`,
+          services: h.services || [
+            { name: 'General Consultation', description: 'Standard medical checkup.' }
+          ]
+        })));
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {

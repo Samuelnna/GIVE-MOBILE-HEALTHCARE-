@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import type { LabTest, LabResultReport, LabAppointment, LabAppointmentCard } from '../types';
 import LabResultDetail from '../components/LabResultDetail';
 import { DocumentTextIcon, CheckCircleIcon } from '../components/IconComponents';
@@ -76,41 +76,41 @@ const Labs: React.FC<LabsProps> = ({ appointments, cards, onScheduleTest, availa
   const [schedulingTest, setSchedulingTest] = useState<LabTest | null>(null);
   const [viewingResult, setViewingResult] = useState<LabResultReport | null>(null);
   const [viewingCardId, setViewingCardId] = useState<string | null>(null);
-  const [realTests, setRealTests] = useState<LabTest[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [realTests, setRealTests] = useState<LabTest[]>(availableTests || []);
+  const [loading, setLoading] = useState(!(availableTests && availableTests.length));
 
   const fetchTests = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('lab_tests').select('*, labs(name, location)');
-    if (!error && data) {
-      setRealTests(data.map(t => ({
-        id: t.id,
-        name: t.name,
-        description: t.description,
-        price: t.price,
-        requiresFasting: t.requires_fasting,
-        category: t.category || 'General',
-        labName: t.labs?.name,
-        labLocation: t.labs?.location,
-        labId: t.lab_id
-      })));
+    if (!(availableTests && availableTests.length)) setLoading(true);
+    try {
+      const { data, error } = await supabase.from('lab_tests').select('*, labs(name, location)');
+      if (!error && data) {
+        setRealTests(data.map(t => ({
+          id: t.id,
+          name: t.name,
+          description: t.description,
+          price: t.price,
+          requiresFasting: t.requires_fasting,
+          category: t.category || 'General',
+          labName: t.labs?.name,
+          labLocation: t.labs?.location,
+          labId: t.lab_id
+        })));
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
+    // Robust Fetch on Entry: Always fetch fresh data to ensure nothing "sleeps"
     fetchTests();
 
-    const channel = supabase
-      .channel('labs_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lab_tests' }, () => {
-        fetchTests();
-      })
+    // Set up real-time listener for lab tests
+    const channel = supabase.channel('lab_tests_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lab_tests' }, fetchTests)
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const testsList = realTests.length > 0 ? realTests : (availableTests && availableTests.length > 0 ? availableTests : []);
@@ -118,15 +118,15 @@ const Labs: React.FC<LabsProps> = ({ appointments, cards, onScheduleTest, availa
   const handleConfirmSchedule = async (details: { test: LabTest; date: string; time: string; location: string; }) => {
     try {
         console.log('Labs: handleConfirmSchedule starting...', details);
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        const userId = await getAuthedUserId();
         
-        if (authError || !user) {
+        if (!userId) {
             alert('You must be logged in to schedule a test.');
             return;
         }
 
         const payload = {
-            patient_id: user.id,
+            patient_id: userId,
             lab_test_id: details.test.id,
             lab_id: (details.test as any).labId || null,
             date: details.date,

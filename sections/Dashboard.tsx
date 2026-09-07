@@ -32,8 +32,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveSection, openTriag
       </div>
 
       <div id="services-section" className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <h2 className="text-3xl font-black text-slate-900 text-center mb-4">Our Services</h2>
-        <p className="text-slate-500 text-center mb-12 max-w-xl mx-auto font-medium">Access a comprehensive ecosystem of healthcare services designed for your convenience.</p>
+        <h2 className="text-2xl sm:text-3xl font-black text-slate-900 text-center mb-3 sm:mb-4">Our Services</h2>
+        <p className="text-slate-500 text-center mb-8 sm:mb-12 max-w-xl mx-auto font-medium text-sm sm:text-base px-2">Access a comprehensive ecosystem of healthcare services designed for your convenience.</p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-8">
           {user.userType === 'professional' && onOpenCreatePatient && (
             <div className="col-span-2 md:col-span-1">
@@ -94,6 +94,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveSection, openTriag
             onClick={() => setActiveSection('Pharmacy')}
           />
         </div>
+
+        <a
+          href="/about"
+          className="mt-8 sm:mt-12 block bg-emerald-950 text-white rounded-2xl sm:rounded-[2rem] p-6 sm:p-10 hover:bg-emerald-900 transition-colors"
+        >
+          <p className="text-emerald-300 text-xs font-black uppercase tracking-[0.2em] mb-2">Mobile Healthcare International</p>
+          <h3 className="text-2xl sm:text-3xl font-black">About MobileDoc</h3>
+          <p className="mt-3 text-emerald-50/80 font-medium max-w-2xl">
+            Learn who built the platform, how clinicians are verified, and how we bring care to Enugu, Lagos, Abuja, and rural cells.
+          </p>
+          <span className="inline-flex items-center gap-2 mt-6 text-sm font-black uppercase tracking-wide text-emerald-200">
+            Read the story
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </a>
       </div>
 
       <HealthTopics />

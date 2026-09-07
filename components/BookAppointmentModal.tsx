@@ -23,13 +23,32 @@ const timeSlots = [
 
 const dayMap: { [key: string]: number } = { 'Sun': 0, 'Mon': 1, 'Tue': 2, 'Wed': 3, 'Thu': 4, 'Fri': 5, 'Sat': 6 };
 
+import { supabase } from '../src/supabaseClient';
+
 const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onClose, onConfirm }) => {
   const availableTypes = useMemo(() => doctor.consultationTypes || ['Video Call', 'Audio Call', 'In-Person', 'Messaging'], [doctor]);
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [appointmentType, setAppointmentType] = useState<'Video Call' | 'Audio Call' | 'In-Person' | 'Messaging'>(availableTypes[0] as 'Video Call' | 'Audio Call' | 'In-Person' | 'Messaging');
+
+  const fetchBookedSlots = async (dateStr: string) => {
+    setIsLoadingSlots(true);
+    const { data } = await supabase
+        .from('appointments')
+        .select('time')
+        .eq('doctor_id', doctor.id)
+        .eq('date', dateStr)
+        .in('status', ['Pending', 'Upcoming', 'Completed']);
+    
+    if (data) {
+        setBookedSlots(data.map(s => s.time));
+    }
+    setIsLoadingSlots(false);
+  };
   const [reason, setReason] = useState('');
 
   const availableDays = useMemo(() => {
@@ -93,7 +112,14 @@ const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onC
       <button
         key={day}
         disabled={isDisabled}
-        onClick={() => { setSelectedDate(currentDate); setSelectedTime(null); }}
+        onClick={() => { 
+            setSelectedDate(currentDate); 
+            setSelectedTime(null); 
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const d = String(currentDate.getDate()).padStart(2, '0');
+            fetchBookedSlots(`${year}-${month}-${d}`);
+        }}
         className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors text-sm ${
           isSelected ? 'bg-sky-600 text-white font-bold' : 
           isDisabled ? 'text-slate-300 cursor-not-allowed bg-slate-50 line-through' : 
@@ -142,12 +168,30 @@ const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onC
             {selectedDate && (
                 <div className="mt-6">
                     <h3 className="font-semibold text-slate-700 mb-2">Select Time for {selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</h3>
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                        {timeSlots.map(time => (
-                            <button key={time} onClick={() => setSelectedTime(time)} className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${selectedTime === time ? 'bg-sky-600 text-white shadow' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>
-                                {time}
-                            </button>
-                        ))}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 relative">
+                        {isLoadingSlots && (
+                            <div className="absolute inset-0 bg-white/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                                <div className="w-5 h-5 border-2 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+                            </div>
+                        )}
+                        {timeSlots.map(time => {
+                            const isBooked = bookedSlots.includes(time);
+                            return (
+                                <button 
+                                    key={time} 
+                                    disabled={isBooked}
+                                    onClick={() => setSelectedTime(time)} 
+                                    className={`px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                                        selectedTime === time ? 'bg-sky-600 text-white shadow' : 
+                                        isBooked ? 'bg-slate-50 text-slate-300 cursor-not-allowed line-through' :
+                                        'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    {time}
+                                    {isBooked && <p className="text-[7px] uppercase font-black tracking-tighter text-slate-400 mt-0.5">Taken</p>}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -192,11 +236,20 @@ const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onC
               <label htmlFor="reason" className="block text-sm font-semibold text-slate-700 mb-2">Reason for Visit</label>
               <textarea id="reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={4} placeholder="Briefly describe your symptoms or reason for the appointment..." className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white text-slate-800" />
             </div>
+            
+            {/* Fee Summary */}
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
+                <div className="flex justify-between items-center mb-1">
+                    <span className="text-sm font-semibold text-emerald-800">Consultation Fee</span>
+                    <span className="font-bold text-emerald-900">₦1,000</span>
+                </div>
+                <p className="text-[10px] text-emerald-600 uppercase font-black tracking-wider leading-tight">Payment is required to confirm your booking with the specialist.</p>
+            </div>
           </div>
         </main>
         <footer className="p-6 border-t border-slate-200 bg-slate-50 text-right">
-            <button onClick={handleConfirm} disabled={!selectedDate || !selectedTime || !reason.trim() || availableTypes.length === 0} className="px-6 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
-                Confirm Appointment
+            <button onClick={handleConfirm} disabled={!selectedDate || !selectedTime || !reason.trim() || availableTypes.length === 0} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-100">
+                Confirm Appointment & Pay (₦1,000)
             </button>
         </footer>
       </div>

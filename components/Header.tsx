@@ -19,9 +19,11 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, cartItems, onCartClick, onOpenCreatePatient, onLogout }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const { addNotification } = useNotification();
+  const notificationMenuRef = useRef<HTMLDivElement>(null);
+  const { notifications, addNotification, removeNotification } = useNotification();
 
   const isAdmin = user.userType === 'admin';
   const isProfessional = user.userType === 'professional';
@@ -36,6 +38,9 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileMenuOpen(false);
+      }
+      if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) {
+        setIsNotificationOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -72,18 +77,37 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
 
   const totalCartItems = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
+  useEffect(() => {
+    document.body.style.overflow = isMenuOpen ? 'hidden' : '';
+    return () => { document.body.style.overflow = ''; };
+  }, [isMenuOpen]);
+
   const NavLink: React.FC<{ name: Section, label: string, isMobile?: boolean }> = ({ name, label, isMobile }) => {
     const isActive = activeSection === name;
+    if (isMobile) {
+      return (
+        <button
+          onClick={() => {
+            setActiveSection(name);
+            setIsMenuOpen(false);
+          }}
+          className={`w-full text-left px-5 py-3.5 rounded-2xl text-base font-black tracking-wide transition-all ${
+            isActive
+              ? 'bg-white text-emerald-900 shadow-lg'
+              : 'text-white hover:bg-white/15'
+          }`}
+        >
+          {label}
+        </button>
+      );
+    }
     return (
       <button
-        onClick={() => {
-          setActiveSection(name);
-          setIsMenuOpen(false);
-        }}
-        className={`${isMobile ? 'w-full text-left px-6 py-4 border-b border-white/10 last:border-0' : 'px-4 py-2 rounded-xl whitespace-nowrap'} text-sm font-bold transition-all duration-200 ${
+        onClick={() => setActiveSection(name)}
+        className={`px-3 py-1.5 rounded-full whitespace-nowrap text-[11px] xl:text-xs font-black uppercase tracking-wider transition-all duration-300 ${
           isActive
-            ? (isAdmin || isProfessional ? 'bg-white text-teal-900 shadow-lg' : 'bg-slate-900 text-white shadow-sm')
-            : (isAdmin || isProfessional ? 'text-white/70 hover:text-white' : 'text-slate-600 hover:text-slate-900')
+            ? (isAdmin || isProfessional ? 'bg-white text-teal-900 shadow-md scale-105' : 'bg-slate-900 text-white shadow-sm scale-105')
+            : (isAdmin || isProfessional ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/50')
         }`}
       >
         {label}
@@ -91,50 +115,84 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
     );
   };
   
-  const UserIcon = user.userType === 'patient' ? PatientIcon : DoctorProfileIcon;
+  const UserIcon = PatientIcon;
 
   return (
     <>
-    <header className={`${isAdmin ? 'bg-slate-900' : (isProfessional ? 'bg-teal-900' : 'bg-white/90 backdrop-blur-md')} border-b ${isAdmin || isProfessional ? 'border-white/10' : 'border-slate-100'} fixed w-full top-0 z-50`}>
+    <header className={`${
+      isMenuOpen
+        ? (isAdmin ? 'bg-slate-950' : isProfessional ? 'bg-teal-950' : 'bg-emerald-950')
+        : isAdmin ? 'bg-slate-900' : (isProfessional ? 'bg-teal-900' : 'bg-white/90 backdrop-blur-md')
+    } border-b ${isAdmin || isProfessional || isMenuOpen ? 'border-white/10' : 'border-slate-100'} fixed w-full top-0 z-50`}>
       {isAdmin && (
         <div className="bg-amber-400 text-slate-900 text-[9px] font-black text-center uppercase tracking-widest py-1">Admin Mode</div>
       )}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className={`flex items-center justify-between ${isAdmin || isProfessional ? 'h-14' : 'h-16'}`}>
-          <div className="flex items-center gap-3">
-            <button onClick={() => setActiveSection('Dashboard')} className="flex items-center gap-2 group">
-              <img src="/logo.jpeg" alt="Logo" className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg object-cover shadow-sm" />
-              <span className={`font-black text-lg sm:text-xl tracking-tighter ${isAdmin || isProfessional ? 'text-white' : 'text-slate-900'}`}>GIVE</span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button onClick={() => setActiveSection('Dashboard')} className="flex items-center gap-2 group mr-2 xl:mr-6">
+              <img src="/mobiledoclogo.jpeg" alt="MobileDoc Logo" className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl object-contain bg-white" />
+              <span className={`font-black text-base sm:text-lg tracking-tighter ${isAdmin || isProfessional || isMenuOpen ? 'text-white' : 'text-slate-900'}`}>MobileDoc</span>
             </button>
           </div>
 
-          <div className="hidden lg:flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1 flex-1 justify-center px-2">
             {navItems.map(item => <NavLink key={item.name} {...item} />)}
           </div>
 
-          <div className={`flex items-center gap-1 sm:gap-2 ${isAdmin || isProfessional ? 'text-white' : ''}`}>
+          <div className={`flex items-center gap-0.5 sm:gap-1 flex-shrink-0 ${isAdmin || isProfessional || isMenuOpen ? 'text-white' : ''}`}>
              {isProfessional && onOpenCreatePatient && (
                 <button onClick={onOpenCreatePatient} className="p-2 rounded-xl bg-white/10 text-white hover:bg-white/20 transition-all hidden md:flex"><UserPlusIcon className="h-5 w-5" /></button>
              )}
              
-             <button onClick={handleNotificationClick} className={`p-2 rounded-xl transition-all relative ${isAdmin || isProfessional ? 'hover:bg-white/10 text-white/60 hover:text-white' : 'hover:bg-slate-100 text-slate-400'}`}>
-                <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" />
-                {permissionStatus === 'default' && <span className="absolute top-2 right-2 h-2 w-2 bg-amber-500 rounded-full border-2 border-white animate-pulse"></span>}
-            </button>
+             <div className="relative" ref={notificationMenuRef}>
+                <button 
+                    onClick={() => {
+                        if (notifications.length > 0) setIsNotificationOpen(!isNotificationOpen);
+                        else handleNotificationClick();
+                    }} 
+                    className={`p-2 rounded-xl transition-all relative ${isAdmin || isProfessional || isMenuOpen ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-100 text-slate-500'}`}
+                >
+                    <BellIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+                    {notifications.length > 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full border-2 border-white animate-bounce"></span>}
+                    {permissionStatus === 'default' && notifications.length === 0 && <span className="absolute top-2 right-2 h-2 w-2 bg-amber-500 rounded-full border-2 border-white animate-pulse"></span>}
+                </button>
+
+                {isNotificationOpen && notifications.length > 0 && (
+                    <div className="absolute right-0 mt-2 w-80 rounded-2xl shadow-2xl py-2 bg-white ring-1 ring-black/5 animate-slide-up z-[60]">
+                        <div className="px-4 py-3 border-b border-slate-50 flex justify-between items-center">
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Notifications</p>
+                            <span className="text-[10px] bg-sky-50 text-sky-600 px-2 py-0.5 rounded-full font-bold">{notifications.length} New</span>
+                        </div>
+                        <div className="max-h-[400px] overflow-y-auto">
+                            {notifications.map(n => (
+                                <div key={n.id} className="px-4 py-3 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors relative group">
+                                    <p className="text-sm font-bold text-slate-800 leading-tight">{n.title}</p>
+                                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">{n.message}</p>
+                                    <button onClick={() => removeNotification(n.id)} className="absolute top-3 right-3 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-2 border-t border-slate-50 text-center">
+                            <button onClick={() => setIsNotificationOpen(false)} className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600">Close</button>
+                        </div>
+                    </div>
+                )}
+            </div>
 
             {user.userType === 'patient' && (
-              <button onClick={onCartClick} className="relative p-2 rounded-xl hover:bg-slate-100 transition-all text-slate-400 group">
+              <button onClick={onCartClick} className={`relative p-2 rounded-xl transition-all group ${isMenuOpen ? 'hover:bg-white/10 text-white' : 'hover:bg-slate-100 text-slate-500'}`}>
                 <ShoppingCartIcon className="h-5 w-5 sm:h-6 sm:w-6" />
                 {totalCartItems > 0 && <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-600 text-[8px] font-black text-white ring-2 ring-white">{totalCartItems}</span>}
               </button>
             )}
 
-             <div className="relative ml-1 sm:ml-2" ref={profileMenuRef}>
-                <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="focus:outline-none p-1">
+              <div className="relative ml-1 sm:ml-2" ref={profileMenuRef}>
+                <button onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)} className="focus:outline-none p-1 group">
                   {user.imageUrl ? (
                     <img src={user.imageUrl} className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover border-2 border-emerald-500 shadow-sm" />
                   ) : (
-                    <div className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full flex items-center justify-center ${isAdmin || isProfessional ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-600'}`}><UserIcon className="h-5 w-5 sm:h-6 sm:w-6" /></div>
+                    <div className={`h-8 w-8 sm:h-9 sm:w-9 rounded-full flex items-center justify-center transition-all ${isAdmin || isProfessional ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}><UserIcon className="h-5 w-5 sm:h-6 sm:w-6" /></div>
                   )}
                 </button>
                 
@@ -157,8 +215,14 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
                 )}
             </div>
 
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-slate-800 hover:opacity-70 transition-opacity">
-                <svg className="h-6 w-6" stroke="currentColor" fill="none" viewBox="0 0 24 24">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className={`lg:hidden p-2 rounded-xl ${
+                isAdmin || isProfessional || isMenuOpen ? 'text-white bg-white/10' : 'text-slate-900 hover:bg-slate-100'
+              }`}
+              aria-label="Open menu"
+            >
+                <svg className="h-7 w-7" stroke="currentColor" fill="none" strokeWidth={2} viewBox="0 0 24 24">
                   {isMenuOpen ? <path d="M6 18L18 6M6 6l12 12" /> : <path d="M4 6h16M4 12h16M4 18h16" />}
                 </svg>
             </button>
@@ -168,24 +232,22 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
     </header>
 
     {isMenuOpen && (
-        <div className={`lg:hidden fixed inset-0 z-40 ${isAdmin || isProfessional ? 'bg-slate-900' : 'bg-emerald-600'} transition-all`}>
-          <div className="flex flex-col h-full pt-20">
-            <div className="px-6 mb-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Navigator</p>
-            </div>
-            <div className="flex-1 overflow-y-auto px-2">
+        <div className={`lg:hidden fixed inset-0 z-[45] ${isAdmin ? 'bg-slate-950' : isProfessional ? 'bg-teal-950' : 'bg-emerald-950'}`}>
+          <div className="flex flex-col h-full pt-24 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <p className="px-2 mb-4 text-[11px] font-black uppercase tracking-[0.28em] text-white">Menu</p>
+            <div className="flex-1 overflow-y-auto space-y-1">
                 {navItems.map(item => <NavLink key={item.name} {...item} isMobile />)}
             </div>
-            <div className="p-6 bg-black/20 mt-auto">
-                <div className="flex items-center gap-4 mb-8">
-                    {user.imageUrl ? <img src={user.imageUrl} className="h-12 w-12 rounded-full border-2 border-white/20 object-cover" /> : <div className="h-12 w-12 rounded-full bg-white/10 flex items-center justify-center"><UserIcon className="h-6 w-6 text-white" /></div>}
-                    <div>
-                        <p className="text-white font-bold">{user.name}</p>
-                        <p className="text-white/40 text-[10px] uppercase font-black tracking-widest">{user.userType}</p>
+            <div className="pt-4 mt-auto border-t border-white/20">
+                <div className="flex items-center gap-4 mb-5 px-1">
+                    {user.imageUrl ? <img src={user.imageUrl} className="h-12 w-12 rounded-full border-2 border-white object-cover" /> : <div className="h-12 w-12 rounded-full bg-white/20 flex items-center justify-center"><UserIcon className="h-6 w-6 text-white" /></div>}
+                    <div className="min-w-0">
+                        <p className="text-white font-bold truncate">{user.name}</p>
+                        <p className="text-white text-[11px] uppercase font-black tracking-widest opacity-80">{user.userType}</p>
                     </div>
                 </div>
                 {onLogout && (
-                    <button onClick={() => { onLogout(); setIsMenuOpen(false); }} className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Secure Sign Out</button>
+                    <button onClick={() => { onLogout(); setIsMenuOpen(false); }} className="w-full py-4 bg-white text-red-600 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all">Sign out</button>
                 )}
             </div>
           </div>

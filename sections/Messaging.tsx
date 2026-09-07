@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { supabase } from '../src/supabaseClient';
-import { SendIcon, PhoneIcon, VideoCameraIcon, ChevronLeftIcon } from '../components/IconComponents';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
+import { SendIcon, PhoneIcon, VideoCameraIcon, ChevronLeftIcon, CreditCardIcon } from '../components/IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface Convo {
@@ -10,7 +10,7 @@ interface Convo {
     messages: any[];
 }
 
-const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVideoCall }) => {
+const Messaging: React.FC<{ onStartVideoCall: (p: any) => void, setActiveSection: (s: any) => void }> = ({ onStartVideoCall, setActiveSection }) => {
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -22,6 +22,7 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
 
   const [conversations, setConversations] = useState<Convo[]>([]);
   const [selectedConvo, setSelectedConvo] = useState<Convo | null>(null);
+  const [isGated, setIsGated] = useState(false);
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
@@ -38,19 +39,19 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
   }, []);
 
   const fetchConversations = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await getAuthedUserId();
+    if (!userId) return;
 
     const { data } = await supabase
         .from('messages')
         .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url)')
-        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
     
     if (data) {
         const groups: Record<string, Convo> = {};
         data.forEach(m => {
-            const isMe = m.sender_id === user.id;
+            const isMe = m.sender_id === userId;
             const otherUser = isMe ? m.receiver : m.sender;
             if (!otherUser) return;
             if (!groups[otherUser.id]) {
@@ -79,9 +80,9 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
   useEffect(() => {
     fetchConversations();
     const fetchProfiles = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data } = await supabase.from('profiles').select('id, full_name, user_type, image_url').neq('id', user.id);
+        const userId = await getAuthedUserId();
+        if (!userId) return;
+        const { data } = await supabase.from('profiles').select('id, full_name, user_type, image_url').neq('id', userId);
         if (data) setAllProfiles(data);
     };
     fetchProfiles();
@@ -91,12 +92,23 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
         });
     
     channel.subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const onWake = () => { fetchConversations(); fetchProfiles(); };
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+    };
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedConvo]);
   
-  const startNewConversation = (profile: any) => {
+  const startNewConversation = async (profile: any) => {
+      const userId = await getAuthedUserId();
+      if (!userId) return;
+
+      setIsGated(false);
       const existing = conversations.find(c => c.id === profile.id);
       if (existing) {
           setSelectedConvo(existing);
@@ -116,11 +128,11 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || !selectedConvo) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const userId = await getAuthedUserId();
+    if (!userId) return;
 
     const { error } = await supabase.from('messages').insert([{
-        sender_id: user.id,
+        sender_id: userId,
         receiver_id: selectedConvo.id,
         content: inputText
     }]);
@@ -150,7 +162,11 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
             {conversations.map(convo => (
                 <div 
                     key={convo.id} 
-                    onClick={() => { setSelectedConvo(convo); setMessages(convo.messages); }} 
+                    onClick={async () => { 
+                        setSelectedConvo(convo); 
+                        setMessages(convo.messages);
+                        setIsGated(false);
+                    }} 
                     className={`flex items-center p-4 cursor-pointer border-b border-slate-50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
                 >
                     <div className="relative">
@@ -205,6 +221,21 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
             {/* Chat Area */}
             <div className={`flex flex-col h-full bg-white ${isMobileView && !selectedConvo ? 'hidden' : 'flex-1'}`}>
                 {selectedConvo ? (
+                    isGated ? (
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+                            <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mb-6 border border-slate-100">
+                                <CreditCardIcon className="h-10 w-10 text-slate-300" />
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-800 mb-2">Consultation Required</h2>
+                            <p className="text-slate-500 max-w-sm mb-8 font-medium">To maintain professional quality, messaging with {selectedConvo.participant.name} requires an active consultation.</p>
+                            <button 
+                                onClick={() => setActiveSection('Doctors')}
+                                className="px-8 py-3 bg-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95 uppercase tracking-widest text-xs"
+                            >
+                                Book Consultation
+                            </button>
+                        </div>
+                    ) : (
                     <>
                         <header className="p-3 sm:p-4 border-b border-slate-200 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-10">
                             <div className="flex items-center gap-3">
@@ -224,8 +255,8 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-3">
-                                <button onClick={() => onStartVideoCall(selectedConvo.participant)} className="p-2 text-slate-400 hover:text-sky-600 transition-all"><PhoneIcon className="h-5 w-5" /></button>
-                                <button onClick={() => onStartVideoCall(selectedConvo.participant)} className="p-2 text-sky-600 bg-sky-50 rounded-full transition-all"><VideoCameraIcon className="h-5 w-5" /></button>
+                                <button onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id })} className="p-2 text-slate-400 hover:text-sky-600 transition-all"><PhoneIcon className="h-5 w-5" /></button>
+                                <button onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id })} className="p-2 text-sky-600 bg-sky-50 rounded-full transition-all"><VideoCameraIcon className="h-5 w-5" /></button>
                             </div>
                         </header>
 
@@ -271,6 +302,7 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void }> = ({ onStartVi
                             </div>
                         </div>
                     </>
+                    )
                 ) : (
                     <div className="flex-1 flex flex-col justify-center items-center text-slate-300 bg-slate-50">
                         <svg className="w-20 h-20 mb-4 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>

@@ -46,6 +46,18 @@ DROP POLICY IF EXISTS "Users can view their own payments" ON public.payments;
 CREATE POLICY "Users can view their own payments" ON public.payments 
 FOR SELECT USING (true);
 
+-- Ensure specific policy for professionals to see payments they are involved in (redundant but safe)
+DROP POLICY IF EXISTS "Professionals can view relevant payments" ON public.payments;
+CREATE POLICY "Professionals can view relevant payments" ON public.payments
+FOR SELECT USING (
+    auth.uid() = user_id OR 
+    (details->>'doctor_id')::uuid = auth.uid() OR
+    EXISTS (
+        SELECT 1 FROM public.appointments a 
+        WHERE a.payment_id = public.payments.id AND a.doctor_id = auth.uid()
+    )
+);
+
 DROP POLICY IF EXISTS "Users can insert their own payments" ON public.payments;
 CREATE POLICY "Users can insert their own payments" ON public.payments 
 FOR INSERT WITH CHECK (true);
@@ -68,5 +80,10 @@ BEGIN
   
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lab_appointments' AND column_name='payment_id') THEN
     ALTER TABLE public.lab_appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
+  END IF;
+
+  -- Ensure payment_id exists on main appointments table
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='appointments' AND column_name='payment_id') THEN
+    ALTER TABLE public.appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
   END IF;
 END $$;

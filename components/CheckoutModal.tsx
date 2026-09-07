@@ -8,6 +8,7 @@ interface CheckoutModalProps {
   onConfirm: (details: {
     deliveryMethod: 'Home Delivery' | 'In-Person Pickup';
     deliveryAddress?: string;
+    deliveryPhone?: string;
     pickupLocation?: string;
   }) => void;
 }
@@ -17,6 +18,7 @@ import { supabase } from '../src/supabaseClient';
 const CheckoutModal: React.FC<CheckoutModalProps> = ({ cartItems, onClose, onConfirm }) => {
   const [deliveryMethod, setDeliveryMethod] = useState<'Home Delivery' | 'In-Person Pickup'>('Home Delivery');
   const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryPhone, setDeliveryPhone] = useState('');
   const [pickupLocation, setPickupLocation] = useState('');
   const [dbPharmacies, setDbPharmacies] = useState<any[]>([]);
 
@@ -37,7 +39,7 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ cartItems, onClose, onCon
 
   const isFormValid = useMemo(() => {
     if (deliveryMethod === 'Home Delivery') {
-      return deliveryAddress.trim().length >= 10; // Simple validation for address length
+      return deliveryAddress.trim().length >= 10 && deliveryPhone.trim().length >= 10;
     }
     if (deliveryMethod === 'In-Person Pickup') {
       return !!pickupLocation;
@@ -49,10 +51,10 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ cartItems, onClose, onCon
     if (!isFormValid) return;
 
     const details = deliveryMethod === 'Home Delivery'
-      ? { deliveryMethod, deliveryAddress }
-      : { deliveryMethod, pickupLocation };
+      ? { deliveryMethod, deliveryAddress, deliveryPhone }
+      : { deliveryMethod, pickupLocation, deliveryPhone }; // Phone helpful for both
       
-    onConfirm(details);
+    onConfirm(details as any);
   };
 
   return (
@@ -122,6 +124,16 @@ const CheckoutModal: React.FC<CheckoutModalProps> = ({ cartItems, onClose, onCon
                     onChange={e => setDeliveryAddress(e.target.value)} 
                     rows={3} 
                     placeholder="Enter your full street address, city, state, and zip code."
+                    className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white text-slate-900 placeholder:text-slate-500 mb-4" 
+                    required 
+                />
+                <label htmlFor="deliveryPhone" className="block text-sm font-semibold text-slate-700 mb-2">Contact Phone Number</label>
+                <input 
+                    type="tel"
+                    id="deliveryPhone"
+                    value={deliveryPhone} 
+                    onChange={e => setDeliveryPhone(e.target.value)} 
+                    placeholder="Enter phone number for delivery updates"
                     className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 bg-white text-slate-900 placeholder:text-slate-500" 
                     required 
                 />

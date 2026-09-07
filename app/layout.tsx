@@ -1,7 +1,7 @@
 import React from 'react';
 
 export const metadata = {
-  title: 'GIVE Mobile Healthcare',
+  title: 'MobileDoc Healthcare',
   description: 'Quality Healthcare in Your Pocket',
   manifest: '/manifest.json',
 };
@@ -18,7 +18,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+        <link rel="icon" href="/mobiledoclogo.jpeg" />
         <script src="https://cdn.tailwindcss.com"></script>
         <style dangerouslySetInnerHTML={{
           __html: `
@@ -66,6 +66,15 @@ export default function RootLayout({
                 animation-iteration-count: 1;
                 transform-origin: 70% 70%;
                 display: inline-block;
+            }
+            html, body {
+              max-width: 100%;
+              overflow-x: hidden;
+              -webkit-text-size-adjust: 100%;
+            }
+            img, video, iframe { max-width: 100%; height: auto; }
+            @media (max-width: 640px) {
+              .overflow-x-auto { -webkit-overflow-scrolling: touch; }
             }
           `
         }} />

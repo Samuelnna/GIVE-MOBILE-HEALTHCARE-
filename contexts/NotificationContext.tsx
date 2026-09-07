@@ -3,7 +3,9 @@ import type { AppNotification, NotificationType } from '../types';
 import Notification from '../components/Notification';
 
 interface NotificationContextType {
+  notifications: AppNotification[];
   addNotification: (title: string, message: string, type: NotificationType) => void;
+  removeNotification: (id: number) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -34,7 +36,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   return (
-    <NotificationContext.Provider value={{ addNotification }}>
+    <NotificationContext.Provider value={{ notifications, addNotification, removeNotification }}>
       {children}
       <div
         aria-live="assertive"

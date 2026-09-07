@@ -27,7 +27,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
 
   const { addNotification } = useNotification();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent, asAdmin = false) => {
     e.preventDefault();
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -42,11 +42,13 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
         .eq('id', data.user?.id)
         .single();
 
-      // If profile doesn't exist yet, we can create a skeleton one or use auth meta
+      // Regular app login uses the saved profile. Admin mode is only for the admin portal / /admin.
       let userType = profileData?.user_type || data.user?.user_metadata?.user_type || 'patient';
-      
-      // HARD OVERRIDE FOR ADMIN EMAIL
-      if (data.user?.email === 'admin@givehealthcare.com') {
+
+      if (asAdmin) {
+        if (data.user?.email !== 'admin@givehealthcare.com') {
+          throw new Error('Unauthorized access. Admin credentials required.');
+        }
         userType = 'admin';
       }
 
@@ -251,7 +253,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
         <ArrowLeftIcon className="h-4 w-4" /> Back to Roles
       </button>
       <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">Admin Portal</h2>
-      <form onSubmit={handleLogin} className="space-y-4">
+      <form onSubmit={(e) => handleLogin(e, true)} className="space-y-4">
         <input
           type="email"
           placeholder="Admin Email Address"
@@ -512,14 +514,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
       <div className="max-w-md w-full">
         <div className="flex flex-col justify-center items-center gap-3 mb-8">
           <div className="bg-white p-2 rounded-2xl shadow-sm">
-            <img src="/logo.jpeg" alt="GIVE Logo" className="h-20 w-20 rounded-xl object-cover" />
+            <img src="/mobiledoclogo.jpeg" alt="MobileDoc Logo" className="h-28 w-28 rounded-2xl object-contain bg-white" />
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight text-center">
-            GIVE Mobile Healthcare
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight text-center">
+            MobileDoc Healthcare
           </h1>
           <p className="text-emerald-700 text-sm text-center font-bold tracking-wide uppercase italic">healthcare everywhere you go</p>
         </div>
-        <div className="bg-white p-10 rounded-[2.5rem] shadow-xl shadow-emerald-500/5 border border-slate-100 transition-all duration-300">
+        <div className="bg-white p-6 sm:p-10 rounded-[2rem] sm:rounded-[2.5rem] shadow-xl shadow-emerald-500/5 border border-slate-100 transition-all duration-300 w-full">
           {authStep === 'initial' && renderInitialScreen()}
           {authStep === 'admin_portal' && renderAdminPortal()}
           {authStep === 'patient_portal' && renderPatientPortal()}
@@ -530,6 +532,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
           {authStep === 'prof_signup_role' && renderProfRole()}
           {authStep === 'prof_signup_license' && renderProfLicense()}
         </div>
+        <p className="text-center mt-6 text-sm font-semibold text-slate-500">
+          <a href="/about" className="hover:text-emerald-700">About MobileDoc</a>
+          <span className="mx-2 text-slate-300">·</span>
+          <span className="text-slate-400 font-medium">Powered by Mobile Healthcare International LTD</span>
+        </p>
       </div>
     </div>
   );

@@ -121,9 +121,18 @@ const ScheduleHospitalServiceModal: React.FC<ScheduleHospitalServiceModalProps> 
             {!selectedDate && <p className="text-sm text-slate-400 mt-2">Please select a date first.</p>}
           </div>
         </main>
+        <div className="px-6 pb-4">
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex justify-between items-center">
+                <div>
+                    <p className="text-sm font-bold text-emerald-900">Hospital Appointment Fee</p>
+                    <p className="text-[10px] text-emerald-600 uppercase font-black tracking-wider">Required to confirm schedule</p>
+                </div>
+                <span className="text-lg font-black text-emerald-900">₦1,000</span>
+            </div>
+        </div>
         <footer className="p-6 border-t border-slate-200 bg-slate-50 text-right">
-            <button onClick={handleConfirm} disabled={!selectedDate || !selectedTime} className="px-6 py-3 bg-sky-600 text-white font-bold rounded-lg hover:bg-sky-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed">
-                Confirm Appointment
+            <button onClick={handleConfirm} disabled={!selectedDate || !selectedTime} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-100">
+                Schedule & Pay (₦1,000)
             </button>
         </footer>
       </div>

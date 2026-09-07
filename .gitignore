@@ -23,8 +23,25 @@ dist-ssr
 *.sln
 *.sw?
 
+# Environment / secrets — never commit these
 .env
+.env.*
 *.env
-*/..env
-/.env
-.env
+!.env.example
+!.env.sample
+**/.env
+**/.env.*
+**/*.env
+.env.local
+.env.development.local
+.env.production.local
+.env.test.local
+*.local
+
+# Next.js build output
+.next/
+out/
+
+# Misc
+.vercel
+*.pem

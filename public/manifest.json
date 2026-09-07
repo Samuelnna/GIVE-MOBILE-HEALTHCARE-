@@ -4,7 +4,7 @@
   "description": "An AI-powered Telemedicine platform that connects patients to hospitals, doctors, labs, and pharmacies. Features secure login, messaging, appointment scheduling, and an AI assistant.",
   "icons": [
     {
-      "src": "/vite.svg",
+      "src": "/mobiledoclogo.jpeg",
       "sizes": "any",
       "type": "image/svg+xml"
     },

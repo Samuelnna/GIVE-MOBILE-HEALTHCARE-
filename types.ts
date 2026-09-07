@@ -8,10 +8,17 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  hospitalId: string;
-  userType: 'patient' | 'professional' | 'admin';
   imageUrl?: string;
+  userType: 'patient' | 'professional' | 'admin';
   status?: string;
+  hospitalId?: string;
+  subaccount_id?: string;
+  bank_details?: {
+    bank_name: string;
+    bank_code?: string;
+    account_number: string;
+    account_name: string;
+  };
 }
 
 export interface Doctor {
@@ -48,6 +55,8 @@ export interface LabTest {
   requiresFasting: boolean;
   category: 'Blood Work' | 'Imaging' | 'Cardiology' | 'General';
   labId?: string;
+  labName?: string;
+  labLocation?: string;
 }
 
 export interface LabAppointment {

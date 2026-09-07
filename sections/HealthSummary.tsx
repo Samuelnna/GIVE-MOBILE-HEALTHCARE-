@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import { Appointment } from '../types';
 import { CalendarIcon, CheckCircleIcon } from '../components/IconComponents';
 
@@ -9,14 +9,14 @@ const HealthSummary: React.FC<{ appointments: Appointment[] }> = ({ appointments
 
   useEffect(() => {
     const fetchSummary = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        const userId = await getAuthedUserId();
+        if (!userId) return;
 
         const [appts, emrs, vitals, meds] = await Promise.all([
-            supabase.from('appointments').select('id', { count: 'exact' }).eq('patient_id', user.id),
-            supabase.from('emr_records').select('id', { count: 'exact' }).eq('patient_id', user.id),
-            supabase.from('vitals').select('id', { count: 'exact' }).eq('patient_id', user.id),
-            supabase.from('pharmacies').select('id', { count: 'exact' }) 
+            supabase.from('appointments').select('id', { count: 'exact' }).eq('patient_id', userId),
+            supabase.from('emr_records').select('id', { count: 'exact' }).eq('patient_id', userId),
+            supabase.from('vitals').select('id', { count: 'exact' }).eq('patient_id', userId),
+            supabase.from('prescriptions').select('id', { count: 'exact' }).eq('patient_id', userId)
         ]);
 
         setStats({
@@ -26,7 +26,7 @@ const HealthSummary: React.FC<{ appointments: Appointment[] }> = ({ appointments
             vitals: vitals.count || 0
         });
 
-        const { data: latestEmr } = await supabase.from('emr_records').select('*').eq('patient_id', user.id).order('created_at', { ascending: false }).limit(5);
+        const { data: latestEmr } = await supabase.from('emr_records').select('*').eq('patient_id', userId).order('created_at', { ascending: false }).limit(5);
         if (latestEmr) setRecentActivities(latestEmr.map(r => ({ id: r.id, type: r.record_type, title: r.title, date: r.created_at })));
     };
     fetchSummary();

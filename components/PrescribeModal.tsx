@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import { CloseIcon, PillIcon } from './IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -16,6 +16,8 @@ const PrescribeModal: React.FC<PrescribeModalProps> = ({ patient, onClose }) => 
     const [selectedMedicationId, setSelectedMedicationId] = useState<string>('');
     const [dosage, setDosage] = useState('');
     const [instructions, setInstructions] = useState('');
+    const [duration, setDuration] = useState('7');
+    const [remindersEnabled, setRemindersEnabled] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const { addNotification } = useNotification();
 
@@ -43,16 +45,20 @@ const PrescribeModal: React.FC<PrescribeModalProps> = ({ patient, onClose }) => 
         e.preventDefault();
         setIsSaving(true);
         try {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error('Not authenticated');
+            const userId = await getAuthedUserId();
+            if (!userId) throw new Error('Not authenticated');
 
             const { error } = await supabase.from('prescriptions').insert([{
-                doctor_id: user.id,
+                doctor_id: userId,
                 patient_id: patient.id,
                 medication_id: selectedMedicationId,
                 pharmacy_id: selectedPharmacyId,
                 dosage,
-                instructions
+                instructions,
+                duration_days: parseInt(duration),
+                reminders_enabled: remindersEnabled,
+                is_reminder_activated: remindersEnabled, // Auto-activate if enabled by doctor
+                status: 'active'
             }]);
 
             if (error) throw error;
@@ -67,19 +73,18 @@ const PrescribeModal: React.FC<PrescribeModalProps> = ({ patient, onClose }) => 
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-8">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full flex flex-col max-h-[90vh] overflow-hidden">
+                <div className="p-6 sm:p-8 border-b border-slate-100 flex justify-between items-center bg-white flex-shrink-0">
+                    <h3 className="text-xl sm:text-2xl font-bold text-slate-800 flex items-center gap-2">
                         <PillIcon className="h-6 w-6 text-emerald-600" />
-                        Prescribe Medication
+                        Prescribe
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><CloseIcon className="h-6 w-6"/></button>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors"><CloseIcon className="h-6 w-6"/></button>
                 </div>
                 
-                <p className="text-sm text-slate-500 mb-6">Prescribing for: <span className="font-bold text-slate-700">{patient.name}</span></p>
-
-                <form onSubmit={handlePrescribe} className="space-y-4">
+                <form onSubmit={handlePrescribe} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-5" style={{ scrollbarWidth: 'thin' }}>
+                    <p className="text-sm text-slate-500 mb-2">Prescribing for: <span className="font-bold text-slate-700">{patient.name}</span></p>
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Select Pharmacy</label>
                         <select 
@@ -118,29 +123,58 @@ const PrescribeModal: React.FC<PrescribeModalProps> = ({ patient, onClose }) => 
                         />
                     </div>
 
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Duration (Days)</label>
+                            <input 
+                                type="number"
+                                required 
+                                min="1"
+                                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
+                                value={duration}
+                                onChange={(e) => setDuration(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex flex-col justify-end">
+                            <label className="flex items-center gap-2 p-3 bg-sky-50 rounded-xl border border-sky-100 cursor-pointer hover:bg-sky-100 transition-colors">
+                                <input 
+                                    type="checkbox" 
+                                    checked={remindersEnabled}
+                                    onChange={(e) => setRemindersEnabled(e.target.checked)}
+                                    className="w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500" 
+                                />
+                                <span className="text-[10px] font-black uppercase text-sky-700 leading-tight">Enable Auto-Reminders</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Instructions</label>
                         <textarea 
                             required 
                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none"
-                            placeholder="e.g. Take after meals for 7 days"
-                            rows={3}
+                            placeholder="e.g. Take after meals..."
+                            rows={2}
                             value={instructions}
                             onChange={(e) => setInstructions(e.target.value)}
                         />
                     </div>
-
-                    <div className="flex gap-4 pt-4">
-                        <button type="button" onClick={onClose} className="flex-1 py-3 border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-all">Cancel</button>
-                        <button 
-                            type="submit" 
-                            disabled={isSaving || !selectedMedicationId}
-                            className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:bg-slate-400 flex items-center justify-center gap-2"
-                        >
-                            {isSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Send Prescription'}
-                        </button>
-                    </div>
                 </form>
+
+                <div className="p-6 sm:p-8 border-t border-slate-100 bg-slate-50 flex-shrink-0 flex gap-4">
+                    <button type="button" onClick={onClose} className="flex-1 py-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-500 hover:bg-slate-50 transition-all">Cancel</button>
+                    <button 
+                        type="submit" 
+                        onClick={(e) => {
+                            const form = (e.currentTarget.closest('.bg-white') as HTMLElement).querySelector('form');
+                            if (form) form.requestSubmit();
+                        }}
+                        disabled={isSaving || !selectedMedicationId}
+                        className="flex-[2] py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 disabled:bg-slate-400 flex items-center justify-center gap-2 active:scale-95"
+                    >
+                        {isSaving ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Send Prescription'}
+                    </button>
+                </div>
             </div>
         </div>
     );

@@ -1,8 +1,9 @@
 
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../src/supabaseClient';
+import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import { TriageReport, VirtualCard, Order, Doctor, Hospital, LabTest, MedicationRecord, Medication } from '../types';
-import { CheckCircleIcon, DocumentTextIcon, CalendarIcon, ShoppingCartIcon, HospitalIcon } from '../components/IconComponents';
+import { CheckCircleIcon, DocumentTextIcon, CalendarIcon, ShoppingCartIcon, HospitalIcon, BellIcon } from '../components/IconComponents';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface PatientRecordsProps {
     user: any;
@@ -23,6 +24,7 @@ interface PatientRecordsProps {
 
 const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection, onScheduleFromReferral, onPurchasePrescription, paymentHistory = [] }) => {
   const isProfessional = user?.userType === 'professional';
+  const { addNotification } = useNotification();
   const [activeTab, setActiveTab] = useState<'triage' | 'appointments' | 'referrals' | 'prescriptions' | 'payments'>(isProfessional ? 'appointments' : 'triage');
   const [reports, setReports] = useState<any[]>([]);
   const [appts, setAppts] = useState<any[]>([]);
@@ -31,9 +33,30 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
 
-  const fetchData = async () => {
+    const handleEnableReminder = async (prescription: any) => {
+        try {
+            const { error } = await supabase.from('prescriptions').update({ is_reminder_activated: true }).eq('id', prescription.id);
+            if (error) throw error;
+
+            // Smart logic to determine reminder times based on dosage string
+            const dosageLower = (prescription.dosage || '').toLowerCase();
+            let times = "8:00 AM";
+            if (dosageLower.includes('twice') || dosageLower.includes('2 times') || dosageLower.includes('2x')) {
+                times = "8:00 AM and 8:00 PM";
+            } else if (dosageLower.includes('thrice') || dosageLower.includes('3 times') || dosageLower.includes('3x')) {
+                times = "8:00 AM, 2:00 PM, and 8:00 PM";
+            }
+
+            addNotification('Reminders Active', `Reminders scheduled at ${times} daily for ${prescription.duration_days} days.`, 'success');
+            fetchData(); // Refresh list
+        } catch (err: any) {
+            addNotification('Error', err.message, 'error');
+        }
+    };
+
+    const fetchData = async () => {
       // Use user.id from props if available, otherwise get from auth
-      const authUserId = user?.id || (await supabase.auth.getUser()).data.user?.id;
+      const authUserId = user?.id || (await getAuthedUserId());
       if (!authUserId) return;
 
       const { data: reportData } = await supabase.from('emr_records').select('*').eq('patient_id', authUserId).eq('record_type', 'Triage').order('created_at', { ascending: false });
@@ -202,12 +225,23 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                 <div className="space-y-4">
                     {prescriptions.length === 0 && <p className="text-center py-12 text-slate-400">No prescriptions found.</p>}
                     {prescriptions.map(p => (
-                        <div key={p.id} className="p-6 rounded-xl border border-slate-100 bg-white shadow-sm">
+                        <div key={p.id} className="p-6 rounded-xl border border-slate-100 bg-white shadow-md hover:shadow-lg transition-shadow relative overflow-hidden">
                             <div className="flex justify-between items-start mb-4">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-emerald-50 rounded-lg"><ShoppingCartIcon className="w-6 h-6 text-emerald-600"/></div>
                                     <div>
-                                        <h3 className="font-bold text-lg text-slate-800">{p.medication?.name}</h3>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-bold text-lg text-slate-800">{p.medication?.name}</h3>
+                                            {p.is_reminder_activated && (
+                                                <button 
+                                                    onClick={() => addNotification('Notification Active', 'You will receive automated daily alerts for this dose.', 'success')}
+                                                    className="flex items-center gap-1 text-[8px] font-black uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100 shadow-sm hover:bg-emerald-100 transition-colors"
+                                                    title="Click for details"
+                                                >
+                                                    <CheckCircleIcon className="h-3 w-3" /> Reminder Enabled
+                                                </button>
+                                            )}
+                                        </div>
                                         <p className="text-sm text-slate-500">By {p.doctor?.full_name} • {new Date(p.created_at).toLocaleDateString()}</p>
                                     </div>
                                 </div>
@@ -222,9 +256,13 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                                     <p className="text-slate-400 font-bold uppercase text-[10px]">Pharmacy</p>
                                     <p className="text-slate-700">{p.pharmacy?.name} ({p.pharmacy?.location})</p>
                                 </div>
+                                <div>
+                                    <p className="text-slate-400 font-bold uppercase text-[10px]">Course Duration</p>
+                                    <p className="text-slate-700 font-bold">{p.duration_days} Days</p>
+                                </div>
                                 <div className="col-span-2">
                                     <p className="text-slate-400 font-bold uppercase text-[10px]">Instructions</p>
-                                    <p className="text-slate-700">{p.instructions}</p>
+                                    <p className="text-slate-700 leading-relaxed italic">{p.instructions}</p>
                                 </div>
                             </div>
                             {p.status === 'active' && (

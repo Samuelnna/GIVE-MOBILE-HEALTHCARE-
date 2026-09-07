@@ -4,10 +4,11 @@ import type { Appointment, Doctor, User } from '../types';
 import { CalendarIcon, VideoCameraIcon, PhoneIcon, MessageIcon, ChevronDownIcon, ChevronUpIcon, ChevronLeftIcon, ChevronRightIcon, SparklesIcon, HospitalIcon, LabIcon, DoctorIcon } from '../components/IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
 import { api } from '../services/api';
+import { canJoinConsult, type VideoCallTarget } from '../utils/video';
 
 interface AppointmentCardProps {
   appointment: Appointment;
-  onStartVideoCall: (participant: { name: string; imageUrl: string }) => void;
+  onStartVideoCall: (participant: VideoCallTarget) => void;
 }
 
 const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onStartVideoCall }) => {
@@ -86,7 +87,11 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onStartV
   const handleJoinCall = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (currentAppointment.type === 'Video Call') {
-      onStartVideoCall({ name: currentAppointment.doctor.name, imageUrl: currentAppointment.doctor.imageUrl });
+      onStartVideoCall({
+        name: currentAppointment.doctor.name,
+        imageUrl: currentAppointment.doctor.imageUrl,
+        appointmentId: currentAppointment.id,
+      });
     } else if (currentAppointment.type === 'Messaging') {
         alert(`Opening chat with ${currentAppointment.doctor.name}... (This is a placeholder)`);
     } else {
@@ -203,7 +208,7 @@ interface AppointmentsProps {
   hospitalAppointments?: any[];
   labAppointments?: any[];
   doctors: Doctor[];
-  onStartVideoCall: (participant: { name: string; imageUrl: string }) => void;
+  onStartVideoCall: (participant: VideoCallTarget) => void;
   onBookAppointment: (details: {
     doctor: Doctor;
     date: string;
@@ -311,12 +316,16 @@ const Appointments: React.FC<AppointmentsProps> = ({ user, appointments, hospita
                     item.status === 'Upcoming' ? 'bg-green-50 text-green-600' : 
                     item.status === 'Pending' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
                 }`}>{item.status}</span>
-                {item.status === 'Upcoming' && (
+                {item.category === 'Doctor' && canJoinConsult(item.type, item.status) && (
                     <button 
-                        onClick={() => onStartVideoCall({ name: isProView ? (item.patient?.name || 'Patient') : item.doctor.name, imageUrl: isProView ? '' : item.doctor.imageUrl })} 
+                        onClick={() => onStartVideoCall({
+                          name: isProView ? (item.patient?.name || 'Patient') : item.doctor.name,
+                          imageUrl: isProView ? '' : item.doctor.imageUrl,
+                          appointmentId: item.id,
+                        })} 
                         className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition"
                     >
-                        Start Call
+                        Join call
                     </button>
                 )}
             </div>

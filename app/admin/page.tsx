@@ -53,10 +53,10 @@ const AdminLoginPage = () => {
       <div className="max-w-md w-full">
         <div className="flex flex-col justify-center items-center gap-3 mb-8">
           <div className="bg-white p-2 rounded-2xl shadow-sm">
-            <img src="/logo.jpeg" alt="GIVE Logo" className="h-20 w-20 rounded-xl object-cover" />
+            <img src="/mobiledoclogo.jpeg" alt="MobileDoc Logo" className="h-28 w-28 rounded-2xl object-contain bg-white" />
           </div>
           <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight text-center">
-            GIVE Admin Portal
+            MobileDoc Admin Portal
           </h1>
           <p className="text-emerald-700 text-sm text-center font-bold tracking-wide uppercase italic">Restricted Access</p>
         </div>
@@ -85,6 +85,7 @@ const AdminLoginPage = () => {
             <a href="/" className="flex items-center justify-center gap-2 mt-6 text-slate-500 hover:text-slate-800 text-sm font-bold transition-colors">
                 <ArrowLeftIcon className="h-4 w-4" /> Return to Main Site
             </a>
+            <a href="/about" className="block text-center mt-3 text-slate-400 hover:text-slate-700 text-xs font-bold">About MobileDoc</a>
         </div>
       </div>
     </div>

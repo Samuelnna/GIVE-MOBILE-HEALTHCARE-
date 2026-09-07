@@ -24,7 +24,9 @@ CREATE TABLE IF NOT EXISTS public.prescriptions (
   pharmacy_id UUID REFERENCES public.pharmacies(id) ON DELETE CASCADE,
   dosage TEXT,
   instructions TEXT,
-  status TEXT DEFAULT 'active', 
+  duration_days INTEGER DEFAULT 7,
+  reminders_enabled BOOLEAN DEFAULT true,
+  status TEXT DEFAULT 'active', -- active, completed, cancelled
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

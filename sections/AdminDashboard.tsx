@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../src/supabaseClient';
 import { useNotification } from '../contexts/NotificationContext';
+import { Cog6ToothIcon, ChartBarIcon } from '../components/IconComponents';
+import { flwService } from '../services/flutterwave';
+import { createSubaccountAction, verifyTransactionAction } from '../app/actions/subaccount';
 
 interface EntityModalProps {
   title: string;
@@ -28,10 +31,13 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-        <h3 className="text-xl font-bold mb-4">{title}</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+            <h3 className="text-xl font-bold text-slate-800">{title}</h3>
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-6 space-y-4" style={{ scrollbarWidth: 'thin' }}>
           {fields.map((f) => (
             <div key={f.name}>
               <label className="block text-sm font-medium text-slate-700 mb-1">{f.label}</label>
@@ -61,23 +67,29 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
               )}
             </div>
           ))}
-          <div className="flex gap-3 mt-6">
+        </form>
+        <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 border border-slate-300 rounded-md hover:bg-slate-50 font-medium"
+              className="flex-1 px-4 py-2 bg-white border border-slate-300 rounded-md hover:bg-slate-50 font-medium transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
+              form="modal-form" // If needed or just keep inside form, let's keep buttons inside form for simpler submit
+              onClick={(e) => {
+                  // This is a hack to trigger submit if we move buttons outside the scroll area
+                  const form = (e.currentTarget.closest('.bg-white') as HTMLElement).querySelector('form');
+                  if (form) form.requestSubmit();
+              }}
               disabled={isUploading}
-              className="flex-1 px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 font-medium disabled:bg-slate-400 flex items-center justify-center gap-2"
+              className="flex-[2] px-4 py-2 bg-sky-600 text-white rounded-md hover:bg-sky-700 font-medium disabled:bg-slate-400 flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
             >
-              {isUploading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Saving...</> : 'Save'}
+              {isUploading ? <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> Processing...</> : 'Save & Configure'}
             </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
@@ -86,6 +98,8 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
 const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initialPayments = [] }) => {
   const [verifications, setVerifications] = useState<any[]>([]);
   const [dbPayments, setDbPayments] = useState<any[]>([]);
+  const [platformSettings, setPlatformSettings] = useState<any>(null);
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [pharmacies, setPharmacies] = useState<any[]>([]);
   const [medications, setMedications] = useState<any[]>([]);
@@ -107,6 +121,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const [editingBlog, setEditingBlog] = useState<any | null>(null);
   const [healthTopics, setHealthTopics] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCreatingSubaccount, setIsCreatingSubaccount] = useState(false);
   
   const [selectedPharmacyId, setSelectedPharmacyId] = useState<string | null>(null);
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
@@ -118,28 +133,66 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const { addNotification } = useNotification();
 
   useEffect(() => {
-    fetchVerifications();
-    fetchHospitals();
-    fetchPharmacies();
-    fetchMedications();
-    fetchLabs();
-    fetchLabTests();
-    fetchLabAppointments();
-    fetchLabResults();
-    fetchPharmacyOrders();
-    fetchHealthTopics();
-    fetchReferrals();
-    fetchPrescriptions();
-    fetchHospAppts();
-    fetchAllProfiles();
-    fetchPayments();
+    Promise.all([
+      fetchVerifications(),
+      fetchHospitals(),
+      fetchPharmacies(),
+      fetchMedications(),
+      fetchLabs(),
+      fetchLabTests(),
+      fetchLabAppointments(),
+      fetchLabResults(),
+      fetchPharmacyOrders(),
+      fetchHealthTopics(),
+      fetchReferrals(),
+      fetchPrescriptions(),
+      fetchHospAppts(),
+      fetchAllProfiles(),
+      fetchPayments(),
+      fetchPlatformSettings(),
+    ]);
 
     const payChannel = supabase.channel('admin_payments_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchPayments)
         .subscribe();
+
+    const hospApptChannel = supabase.channel('admin_hosp_appts_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'hospital_appointments' }, fetchHospAppts)
+        .subscribe();
     
-    return () => { supabase.removeChannel(payChannel); };
+    return () => { 
+        supabase.removeChannel(payChannel); 
+        supabase.removeChannel(hospApptChannel);
+    };
   }, []);
+
+  const fetchPlatformSettings = async () => {
+    const { data } = await supabase.from('platform_settings').select('*').eq('id', 'commission_rates').single();
+    if (data) setPlatformSettings(data.data);
+  };
+
+  const handleUpdateSettings = async (newData: any) => {
+    setIsUpdatingSettings(true);
+    console.log('Admin: Saving commission rates...', newData);
+    
+    // Use upsert to ensure the row is created if it somehow went missing, or updated
+    const { error } = await supabase
+        .from('platform_settings')
+        .upsert({ 
+            id: 'commission_rates', 
+            data: newData,
+            updated_at: new Date().toISOString() 
+        }, { onConflict: 'id' });
+
+    if (!error) {
+        setPlatformSettings(newData);
+        addNotification('Success', 'Commission rates saved to database', 'success');
+    } else {
+        console.error('Admin: Settings save error:', error);
+        addNotification('Error Saving', error.message, 'error');
+    }
+    setIsUpdatingSettings(false);
+  };
 
   const fetchPayments = async () => {
     console.log('AdminDashboard: Fetching all payments...');
@@ -232,14 +285,37 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   };
 
   const fetchPharmacyOrders = async () => {
-    const { data, error } = await supabase.from('pharmacy_orders').select('*, profiles(full_name), items:pharmacy_order_items(*, medication:medications(name))').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('pharmacy_orders').select('*, profiles(full_name, email), items:pharmacy_order_items(*, medication:medications(name))').order('created_at', { ascending: false });
     if (!error) setPharmacyOrders(data || []);
+  };
+
+  const handleUpdateFulfillment = async (orderId: string, status: string) => {
+    const { error } = await supabase.from('pharmacy_orders').update({ fulfillment_status: status }).eq('id', orderId);
+    if (!error) {
+        addNotification('Success', `Order marked as ${status}`, 'success');
+        fetchPharmacyOrders();
+    }
   };
 
   const [hospAppts, setHospAppts] = useState<any[]>([]);
   const fetchHospAppts = async () => {
-      const { data } = await supabase.from('hospital_appointments').select('*, profiles(full_name), hospitals(name)').order('date', { ascending: false });
-      if (data) setHospAppts(data);
+      console.log('AdminDashboard: Fetching hospital appointments...');
+      const { data, error } = await supabase
+        .from('hospital_appointments')
+        .select(`
+            *,
+            patient:profiles!hospital_appointments_patient_id_fkey(full_name),
+            hospital:hospitals!hospital_appointments_hospital_id_fkey(name)
+        `)
+        .order('date', { ascending: false });
+      
+      if (error) {
+          console.error('AdminDashboard: Hospital appts fetch error, trying fallback:', error);
+          const { data: fallbackData } = await supabase.from('hospital_appointments').select('*').order('date', { ascending: false });
+          if (fallbackData) setHospAppts(fallbackData);
+      } else if (data) {
+          setHospAppts(data);
+      }
   };
 
   const fetchReferrals = async () => {
@@ -299,11 +375,21 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   };
 
   const handleDelete = async (table: string, id: string, refreshFn: () => void) => {
-    if (!window.confirm('Are you sure you want to delete this?')) return;
+    if (!window.confirm('Are you sure you want to delete this? WARNING: This will permanently remove the record and its linked subaccount reference.')) return;
     const { error } = await supabase.from(table).delete().eq('id', id);
     if (error) addNotification('Error', error.message, 'error');
     else {
         addNotification('Success', 'Deleted successfully', 'success');
+        refreshFn();
+    }
+  };
+
+  const handleDetachSubaccount = async (table: string, id: string, refreshFn: () => void) => {
+    if (!window.confirm('Detach Flutterwave subaccount from this provider? Historical data will be preserved, but new splits will stop.')) return;
+    const { error } = await supabase.from(table).update({ subaccount_id: null, bank_details: null }).eq('id', id);
+    if (error) addNotification('Error', error.message, 'error');
+    else {
+        addNotification('Success', 'Subaccount detached', 'success');
         refreshFn();
     }
   };
@@ -390,31 +476,210 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
 
   const displayPayments = dbPayments.length > 0 ? dbPayments : initialPayments;
 
+  const handleCreateProviderWithPayout = async (table: string, values: any, businessType: 'lab' | 'pharmacy' | 'hospital') => {
+    setIsCreatingSubaccount(true);
+    try {
+        let subaccountId = values.subaccount_id || null;
+        
+        // 1. Programmatically create subaccount if bank details are provided
+        if (!subaccountId && values.account_bank && values.account_number) {
+            console.log('Admin: Creating Flutterwave subaccount for new provider...');
+            
+            // Determine split value for the MAIN account (platform commission)
+            const platformCommission = 1 - (platformSettings?.[`${businessType}_share`] || 0.8);
+            
+            const res = await createSubaccountAction({
+                account_bank: values.account_bank,
+                account_number: values.account_number,
+                business_name: values.name,
+                business_email: values.email || 'provider@givehealthcare.com',
+                business_mobile: values.phone || '08000000000',
+                split_value: platformCommission
+            });
+
+            if (res.success) {
+                subaccountId = res.subaccount_id;
+                addNotification('Success', `Flutterwave Subaccount Created: ${subaccountId}`, 'success');
+            } else {
+                throw new Error(`Subaccount creation failed: ${res.error}`);
+            }
+        }
+
+        // 2. Save provider to Supabase
+        const dbPayload = {
+            name: values.name,
+            location: values.location,
+            phone: values.phone,
+            email: values.email,
+            subaccount_id: subaccountId,
+            bank_details: (values.account_bank && values.account_number) ? {
+                bank_code: values.account_bank,
+                account_number: values.account_number
+            } : null
+        };
+
+        const { error } = await supabase.from(table).insert([dbPayload]);
+        if (error) throw error;
+
+        addNotification('Success', `${businessType.toUpperCase()} added successfully`, 'success');
+        
+        // 3. Refresh lists
+        if (businessType === 'hospital') fetchHospitals();
+        else if (businessType === 'pharmacy') fetchPharmacies();
+        else if (businessType === 'lab') fetchLabs();
+
+        return true;
+    } catch (err: any) {
+        addNotification('Provider Creation Error', err.message, 'error');
+        return false;
+    } finally {
+        setIsCreatingSubaccount(false);
+    }
+  };
+
+  const commonProviderFields = [
+    { name: 'name', label: 'Business Name' },
+    { name: 'location', label: 'Location Address' },
+    { name: 'phone', label: 'Contact Phone' },
+    { name: 'email', label: 'Contact Email' },
+    { name: 'account_bank', label: 'Settlement Bank', type: 'select', options: flwService.getBanks().map(b => ({ value: b.code, label: b.name })) },
+    { name: 'account_number', label: 'Bank Account Number' },
+    { name: 'subaccount_id', label: 'Existing Subaccount ID (Optional)' }
+  ];
+
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-8">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800">Administrative Dashboard</h2>
-        <button onClick={() => setShowBlogModal(true)} className="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md">Create New Blog Post</button>
+    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 text-center sm:text-left">Admin Dashboard</h2>
+        <button onClick={() => setShowBlogModal(true)} className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 text-sm sm:text-base">New Blog Post</button>
+      </div>
+
+      {/* Platform Configuration (Revenue Sharing) */}
+      {/* Platform Configuration (Revenue Sharing) */}
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-emerald-100 overflow-hidden relative">
+          <div className="absolute top-0 right-0 p-8 opacity-5 hidden sm:block">
+              <Cog6ToothIcon className="h-24 w-24" />
+          </div>
+          <div className="relative z-10">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-800 mb-2 flex items-center gap-2">
+                <Cog6ToothIcon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600" />
+                Revenue Sharing
+            </h3>
+            <p className="text-slate-500 mb-6 text-xs sm:text-sm">Adjust provider payout shares. The remaining % is platform commission.</p>
+            
+            {platformSettings ? (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                    <div className="space-y-3 sm:space-y-4">
+                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="font-bold text-slate-700">Laboratory Share</p>
+                                <p className="text-xs text-slate-500">Current split for all lab tests</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="number" 
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={platformSettings.lab_share} 
+                                    onChange={(e) => setPlatformSettings({ ...platformSettings, lab_share: parseFloat(e.target.value) })}
+                                    className="w-20 p-2 text-center font-bold text-emerald-600 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-bold text-slate-400">({(platformSettings.lab_share * 100).toFixed(0)}%)</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="font-bold text-slate-700">Doctor Share</p>
+                                <p className="text-xs text-slate-500">Proposed split for consultations</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="number" 
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={platformSettings.doctor_share} 
+                                    onChange={(e) => setPlatformSettings({ ...platformSettings, doctor_share: parseFloat(e.target.value) })}
+                                    className="w-20 p-2 text-center font-bold text-emerald-600 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-bold text-slate-400">({(platformSettings.doctor_share * 100).toFixed(0)}%)</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="font-bold text-slate-700">Pharmacy Share</p>
+                                <p className="text-xs text-slate-500">Proposed split for pharmacy orders</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="number" 
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={platformSettings.pharmacy_share || 0.9} 
+                                    onChange={(e) => setPlatformSettings({ ...platformSettings, pharmacy_share: parseFloat(e.target.value) })}
+                                    className="w-20 p-2 text-center font-bold text-emerald-600 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-bold text-slate-400">({((platformSettings.pharmacy_share || 0.9) * 100).toFixed(0)}%)</span>
+                            </div>
+                        </div>
+                        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+                            <div>
+                                <p className="font-bold text-slate-700">Hospital Share</p>
+                                <p className="text-xs text-slate-500">Proposed split for hospital services</p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <input 
+                                    type="number" 
+                                    step="0.05"
+                                    min="0"
+                                    max="1"
+                                    value={platformSettings.hospital_share || 0.85} 
+                                    onChange={(e) => setPlatformSettings({ ...platformSettings, hospital_share: parseFloat(e.target.value) })}
+                                    className="w-20 p-2 text-center font-bold text-emerald-600 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500"
+                                />
+                                <span className="text-sm font-bold text-slate-400">({((platformSettings.hospital_share || 0.85) * 100).toFixed(0)}%)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex flex-col justify-end gap-3">
+                        <button 
+                            disabled={isUpdatingSettings}
+                            onClick={() => handleUpdateSettings(platformSettings)}
+                            className="w-full py-4 bg-emerald-600 text-white font-black uppercase tracking-widest rounded-xl hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 disabled:bg-slate-300 flex items-center justify-center gap-2"
+                        >
+                            {isUpdatingSettings ? 'Updating...' : 'Save Configuration'}
+                        </button>
+                        <p className="text-[10px] text-slate-400 italic text-center">Changes take effect immediately for all future transactions.</p>
+                    </div>
+                </div>
+            ) : (
+                <div className="h-32 flex items-center justify-center bg-slate-50 rounded-xl animate-pulse">
+                    <span className="text-slate-400 font-bold">Loading Configuration...</span>
+                </div>
+            )}
+          </div>
       </div>
 
       {/* NEW: Prominent Lab Section at Top */}
-      <div className="bg-white p-6 rounded-xl shadow-lg border-2 border-sky-100">
-          <div className="flex justify-between items-center border-b pb-2 mb-4">
-            <h3 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                <span className="bg-sky-600 text-white p-1 rounded">LAB</span> Lab Appointments & Result Delivery
+      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-2 border-sky-100 overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center border-b pb-4 mb-4 gap-4">
+            <h3 className="text-lg sm:text-xl font-black text-slate-800 flex items-center gap-2">
+                <span className="bg-sky-600 text-white p-1 rounded text-xs sm:text-sm">LAB</span> Laboratory Management
             </h3>
-            <div className="flex gap-4 items-center">
+            <div className="flex flex-wrap gap-3 items-center">
                 <button 
                     onClick={() => setShowManualResultModal(true)}
-                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg font-black text-xs uppercase hover:bg-emerald-700 transition shadow-md"
+                    className="flex-1 sm:flex-none bg-emerald-600 text-white px-4 py-2 rounded-lg font-black text-[10px] sm:text-xs uppercase hover:bg-emerald-700 transition shadow-md active:scale-95"
                 >
-                    + Manual Result Upload
+                    + Manual Upload
                 </button>
-                <button onClick={() => { fetchLabAppointments(); fetchLabResults(); }} className="text-sky-600 text-xs font-bold hover:underline">Refresh Lab Data</button>
+                <button onClick={() => { fetchLabAppointments(); fetchLabResults(); }} className="text-sky-600 text-[10px] sm:text-xs font-bold hover:underline">Refresh</button>
             </div>
           </div>
           
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
                 <div>
                     <h4 className="text-sm font-bold text-slate-400 uppercase mb-3 flex justify-between items-center">
                         Active Lab Appointments
@@ -426,9 +691,9 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                             <tbody className="divide-y divide-slate-100">
                                 {labAppointments.map(a => (
                                     <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="p-3 font-bold text-slate-700">{a.profiles?.full_name}</td>
-                                        <td className="p-3 text-slate-600">{a.lab_tests?.name}</td>
-                                        <td className="p-3 text-slate-500 italic">{a.labs?.name}</td>
+                                        <td className="p-3 font-bold text-slate-700">{a.profiles?.full_name || 'N/A'}</td>
+                                        <td className="p-3 text-slate-600">{a.lab_tests?.name || 'N/A'}</td>
+                                        <td className="p-3 text-slate-500 italic">{a.labs?.name || 'N/A'}</td>
                                         <td className="p-3 text-right">
                                             <button 
                                                 onClick={() => { setSelectedApptForResult(a); setShowResultModal(true); }}
@@ -595,17 +860,20 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         </div>
 
         {/* Hospital Appointments Tracking */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Hospital Appointments</h3>
+        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 overflow-hidden">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 className="text-xl font-bold text-slate-800">Hospital Appointments</h3>
+                <button onClick={fetchHospAppts} className="text-sky-600 text-xs font-bold hover:underline">Refresh List</button>
+            </div>
             <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">Patient</th><th className="pb-2">Hospital</th><th className="pb-2">Service</th><th className="pb-2">Date/Time</th><th className="pb-2">Status</th></tr></thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {hospAppts.map(a => (
-                            <tr key={a.id}>
-                                <td className="py-3 font-bold text-slate-700">{a.profiles?.full_name}</td>
-                                <td className="py-3 text-slate-600">{a.hospitals?.name}</td>
-                                <td className="py-3 text-slate-500">{a.service_name}</td>
+                        <table className="w-full text-left text-sm">
+                            <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">Patient</th><th className="pb-2">Hospital</th><th className="pb-2">Service</th><th className="pb-2">Date/Time</th><th className="pb-2">Status</th></tr></thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {hospAppts.map(a => (
+                                    <tr key={a.id}>
+                                        <td className="py-3 font-bold text-slate-700">{a.patient?.full_name || a.profiles?.full_name || 'N/A'}</td>
+                                        <td className="py-3 text-slate-600">{a.hospital?.name || a.hospitals?.name || 'N/A'}</td>
+                                        <td className="py-3 text-slate-500">{a.service_name}</td>
                                 <td className="py-3 text-slate-500">{a.date} at {a.time}</td>
                                 <td className="py-3"><span className="px-2 py-1 bg-teal-100 text-teal-700 rounded-full text-[10px] font-bold uppercase">{a.status}</span></td>
                             </tr>
@@ -622,14 +890,24 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Financial Transactions (Payments)</h3>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">User</th><th className="pb-2">Amount</th><th className="pb-2">Type</th><th className="pb-2">Reference</th><th className="pb-2">Status</th></tr></thead>
+                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">User</th><th className="pb-2">Amount</th><th className="pb-2">Type</th><th className="pb-2">Reference</th><th className="pb-2">Split</th><th className="pb-2">Status</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                         {displayPayments.map(p => (
                             <tr key={p.id}>
                                 <td className="py-3 font-bold text-slate-700">{p.profiles?.full_name}</td>
                                 <td className="py-3 font-bold text-emerald-600">₦{Number(p.amount).toLocaleString()}</td>
                                 <td className="py-3 capitalize text-slate-500">{p.payment_type.replace('_', ' ')}</td>
-                                <td className="py-3 font-mono text-[10px] text-slate-400">{p.tx_ref}</td>
+                                <td className="py-3 font-mono text-[10px] text-slate-400">
+                                    {p.tx_ref}
+                                    <p className="text-[9px] text-slate-300">FLW: {p.flw_ref || 'N/A'}</p>
+                                </td>
+                                <td className="py-3">
+                                    {p.flw_ref?.startsWith('RS_') || p.payment_type !== 'cart_checkout' ? (
+                                        <span className="text-[10px] bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold">Split Active</span>
+                                    ) : (
+                                        <span className="text-[10px] text-slate-300 italic">None</span>
+                                    )}
+                                </td>
                                 <td className="py-3">
                                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${
                                         p.status === 'successful' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
@@ -645,44 +923,115 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
             </div>
         </div>
 
-        {/* Pharmacy Orders */}
+        {/* Pharmacy Orders & Fulfillment */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Recent Pharmacy Orders</h3>
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 className="text-xl font-bold text-slate-800">Pharmacy Order Fulfillment</h3>
+                <button onClick={fetchPharmacyOrders} className="text-sky-600 text-xs font-bold hover:underline">Refresh Orders</button>
+            </div>
             <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">Patient</th><th className="pb-2">Items</th><th className="pb-2">Total</th><th className="pb-2">Delivery</th><th className="pb-2">Status</th></tr></thead>
+                <table className="w-full text-left text-sm min-w-[800px]">
+                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">Patient & Contact</th><th className="pb-2">Items & Total</th><th className="pb-2">Delivery Address</th><th className="pb-2">Fulfillment</th><th className="pb-2 text-right">Actions</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                         {pharmacyOrders.map(o => (
-                            <tr key={o.id}>
-                                <td className="py-3 font-bold text-slate-700">{o.profiles?.full_name}</td>
-                                <td className="py-3 text-slate-600 text-xs">
-                                    {o.items?.map((i: any) => `${i.medication?.name} (x${i.quantity})`).join(', ')}
+                            <tr key={o.id} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-4">
+                                    <p className="font-bold text-slate-700">{o.profiles?.full_name}</p>
+                                    <p className="text-[10px] text-slate-500">{o.profiles?.email}</p>
+                                    <p className="text-[10px] font-black text-emerald-600 uppercase mt-1">{o.delivery_phone || 'No phone'}</p>
                                 </td>
-                                <td className="py-3 font-bold text-emerald-600">₦{Number(o.total_amount).toLocaleString()}</td>
-                                <td className="py-3 text-slate-500 text-xs">{o.delivery_method} {o.pickup_location ? `(${o.pickup_location})` : ''}</td>
-                                <td className="py-3"><span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full text-[10px] font-bold uppercase">{o.status}</span></td>
+                                <td className="py-4">
+                                    <p className="text-slate-600 text-xs font-medium">
+                                        {o.items?.map((i: any) => `${i.medication?.name} (x${i.quantity})`).join(', ')}
+                                    </p>
+                                    <p className="font-black text-slate-800 mt-1">₦{Number(o.total_amount).toLocaleString()}</p>
+                                </td>
+                                <td className="py-4">
+                                    <div className="max-w-[200px]">
+                                        <p className="text-xs text-slate-600 leading-relaxed italic">
+                                            {o.delivery_method === 'Home Delivery' ? o.delivery_address : `Pickup at: ${o.pickup_location}`}
+                                        </p>
+                                    </div>
+                                </td>
+                                <td className="py-4">
+                                    <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${
+                                        o.fulfillment_status === 'delivered' ? 'bg-green-100 text-green-700' :
+                                        o.fulfillment_status === 'dispatched' ? 'bg-sky-100 text-sky-700' :
+                                        'bg-amber-100 text-amber-700'
+                                    }`}>
+                                        {o.fulfillment_status || 'Pending'}
+                                    </span>
+                                </td>
+                                <td className="py-4 text-right">
+                                    <div className="flex justify-end gap-2">
+                                        {o.fulfillment_status !== 'dispatched' && o.fulfillment_status !== 'delivered' && (
+                                            <button 
+                                                onClick={() => handleUpdateFulfillment(o.id, 'dispatched')}
+                                                className="bg-sky-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-sky-700 transition shadow-sm"
+                                            >
+                                                Dispatch
+                                            </button>
+                                        )}
+                                        {o.fulfillment_status === 'dispatched' && (
+                                            <button 
+                                                onClick={() => handleUpdateFulfillment(o.id, 'delivered')}
+                                                className="bg-emerald-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase hover:bg-emerald-700 transition shadow-sm"
+                                            >
+                                                Mark Delivered
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
-                {pharmacyOrders.length === 0 && <p className="text-center py-4 text-slate-500">No pharmacy orders found.</p>}
+                {pharmacyOrders.length === 0 && <p className="text-center py-8 text-slate-400 italic">No pharmacy orders to fulfill.</p>}
             </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Hospitals */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
             <h3 className="text-xl font-bold text-slate-800">Hospitals</h3>
             <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{hospitals.length}</span>
           </div>
-          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-2">
+          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
             {hospitals.map(h => (
-                <div key={h.id} className="text-sm border-b border-slate-50 pb-2 flex justify-between items-center group">
-                    <div className="flex flex-col">
-                        <span className="font-bold text-slate-700">{h.name}</span>
-                        <span className="text-slate-500 text-xs">{h.location}</span>
+                <div key={h.id} className="text-sm border-b border-slate-50 pb-3 flex justify-between items-start group">
+                    <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-700">{h.name}</span>
+                            {h.subaccount_id ? (
+                                <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-black uppercase">Active Payout</span>
+                            ) : (
+                                <span className="text-[8px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-black uppercase">Unconfigured</span>
+                            )}
+                        </div>
+                        <span className="text-slate-500 text-[10px] uppercase mb-1">{h.location}</span>
+                        {h.subaccount_id && (
+                            <div className="mt-2 p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 relative group/sub">
+                                <div className="flex justify-between items-start mb-2">
+                                    <p className="text-[9px] text-emerald-600 font-black uppercase tracking-widest">Payout Active</p>
+                                    <button 
+                                        onClick={() => handleDetachSubaccount('hospitals', h.id, fetchHospitals)}
+                                        className="p-1 text-slate-300 hover:text-red-600 hover:bg-white rounded transition-all"
+                                        title="Manage/Detach Payout"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <p className="text-[10px] font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-emerald-100 mb-2">{h.subaccount_id}</p>
+                                {h.bank_details && (
+                                    <div className="pt-2 border-t border-emerald-100">
+                                        <p className="text-[10px] text-slate-600 font-bold leading-tight">{h.bank_details.bank_name || h.bank_details.bank_code}</p>
+                                        <p className="text-[10px] text-slate-500 leading-tight">{h.bank_details.account_number} • {h.bank_details.account_name || 'Business Account'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <button onClick={() => handleDelete('hospitals', h.id, fetchHospitals)} className="text-red-500 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded">
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -694,17 +1043,45 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         </div>
 
         {/* Pharmacies */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 overflow-hidden">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h3 className="text-xl font-bold text-slate-800">Pharmacies</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-slate-800">Pharmacies</h3>
             <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{pharmacies.length}</span>
           </div>
-          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-2">
+          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
             {pharmacies.map(p => (
-                <div key={p.id} className="text-sm border-b border-slate-50 pb-2 flex justify-between items-center group">
-                    <div className="flex flex-col">
-                        <span className="font-bold text-slate-700">{p.name}</span>
-                        <span className="text-slate-500 text-xs">{p.location}</span>
+                <div key={p.id} className="text-sm border-b border-slate-50 pb-3 flex justify-between items-start group">
+                    <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-700">{p.name}</span>
+                            {p.subaccount_id ? (
+                                <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-black uppercase">Active Payout</span>
+                            ) : (
+                                <span className="text-[8px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-black uppercase">Unconfigured</span>
+                            )}
+                        </div>
+                        <span className="text-slate-500 text-[10px] uppercase mb-1">{p.location}</span>
+                        {p.subaccount_id && (
+                            <div className="mt-2 p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 relative group/sub">
+                                <div className="flex justify-between items-start mb-2">
+                                    <p className="text-[9px] text-emerald-600 font-black uppercase tracking-widest">Payout Active</p>
+                                    <button 
+                                        onClick={() => handleDetachSubaccount('pharmacies', p.id, fetchPharmacies)}
+                                        className="p-1 text-slate-300 hover:text-red-600 hover:bg-white rounded transition-all"
+                                        title="Manage/Detach Payout"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <p className="text-[10px] font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-emerald-100 mb-2">{p.subaccount_id}</p>
+                                {p.bank_details && (
+                                    <div className="pt-2 border-t border-emerald-100">
+                                        <p className="text-[10px] text-slate-600 font-bold leading-tight">{p.bank_details.bank_name || p.bank_details.bank_code}</p>
+                                        <p className="text-[10px] text-slate-500 leading-tight">{p.bank_details.account_number} • {p.bank_details.account_name || 'Pharmacy Account'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setSelectedPharmacyId(p.id); setShowMedicationModal(true); }} className="text-[10px] bg-teal-100 text-teal-700 px-2 py-1 rounded font-black uppercase hover:bg-teal-200">+ Med</button>
@@ -719,17 +1096,45 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         </div>
 
         {/* Labs */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 overflow-hidden">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
-            <h3 className="text-xl font-bold text-slate-800">Laboratories</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-slate-800">Labs</h3>
             <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2 py-1 rounded-full">{labs.length}</span>
           </div>
-          <div className="space-y-2 mb-4 max-h-60 overflow-y-auto pr-2">
+          <div className="space-y-3 mb-4 max-h-60 overflow-y-auto pr-2">
             {labs.map(l => (
-                <div key={l.id} className="text-sm border-b border-slate-50 pb-2 flex justify-between items-center group">
-                    <div className="flex flex-col">
-                        <span className="font-bold text-slate-700">{l.name}</span>
-                        <span className="text-slate-500 text-xs">{l.location}</span>
+                <div key={l.id} className="text-sm border-b border-slate-50 pb-3 flex justify-between items-start group">
+                    <div className="flex flex-col flex-1">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-700">{l.name}</span>
+                            {l.subaccount_id ? (
+                                <span className="text-[8px] bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded-full font-black uppercase">Active Payout</span>
+                            ) : (
+                                <span className="text-[8px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full font-black uppercase">Unconfigured</span>
+                            )}
+                        </div>
+                        <span className="text-slate-500 text-[10px] uppercase mb-1">{l.location}</span>
+                        {l.subaccount_id && (
+                            <div className="mt-2 p-3 bg-emerald-50/50 rounded-xl border border-emerald-100 relative group/sub">
+                                <div className="flex justify-between items-start mb-2">
+                                    <p className="text-[9px] text-emerald-600 font-black uppercase tracking-widest">Payout Active</p>
+                                    <button 
+                                        onClick={() => handleDetachSubaccount('labs', l.id, fetchLabs)}
+                                        className="p-1 text-slate-300 hover:text-red-600 hover:bg-white rounded transition-all"
+                                        title="Manage/Detach Payout"
+                                    >
+                                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                                    </button>
+                                </div>
+                                <p className="text-[10px] font-mono font-bold text-slate-700 bg-white px-2 py-1 rounded border border-emerald-100 mb-2">{l.subaccount_id}</p>
+                                {l.bank_details && (
+                                    <div className="pt-2 border-t border-emerald-100">
+                                        <p className="text-[10px] text-slate-600 font-bold leading-tight">{l.bank_details.bank_name || l.bank_details.bank_code}</p>
+                                        <p className="text-[10px] text-slate-500 leading-tight">{l.bank_details.account_number} • {l.bank_details.account_name || 'Laboratory Account'}</p>
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setSelectedLabId(l.id); setShowLabTestModal(true); }} className="text-[10px] bg-sky-100 text-sky-700 px-2 py-1 rounded font-black uppercase hover:bg-sky-200">+ Test</button>
@@ -744,7 +1149,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Medication Inventory */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Drug Inventory</h3>
@@ -789,23 +1194,43 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
       </div>
 
       {showHospitalModal && (
-        <EntityModal title="Add Hospital" onClose={() => setShowHospitalModal(false)} fields={[{ name: 'name', label: 'Hospital Name' }, { name: 'location', label: 'Location' }, { name: 'phone', label: 'Phone' }, { name: 'email', label: 'Email' }]} onSave={async (val) => {
-            const { error } = await supabase.from('hospitals').insert([val]);
-            if (!error) { addNotification('Success', 'Hospital added', 'success'); fetchHospitals(); setShowHospitalModal(false); }
-        }}/>
+        <EntityModal 
+            title="Add Hospital (Auto-Configure Payout)" 
+            onClose={() => setShowHospitalModal(false)} 
+            isUploading={isCreatingSubaccount}
+            fields={commonProviderFields} 
+            onSave={async (val) => {
+                const success = await handleCreateProviderWithPayout('hospitals', val, 'hospital');
+                if (success) setShowHospitalModal(false);
+            }}
+        />
       )}
       {showPharmacyModal && (
-        <EntityModal title="Add Pharmacy" onClose={() => setShowPharmacyModal(false)} fields={[{ name: 'name', label: 'Pharmacy Name' }, { name: 'location', label: 'Location' }, { name: 'phone', label: 'Phone' }, { name: 'email', label: 'Email' }]} onSave={async (val) => {
-            const { error } = await supabase.from('pharmacies').insert([val]);
-            if (!error) { addNotification('Success', 'Pharmacy added', 'success'); fetchPharmacies(); setShowPharmacyModal(false); }
-        }}/>
+        <EntityModal 
+            title="Add Pharmacy (Auto-Configure Payout)" 
+            onClose={() => setShowPharmacyModal(false)} 
+            isUploading={isCreatingSubaccount}
+            fields={commonProviderFields} 
+            onSave={async (val) => {
+                const success = await handleCreateProviderWithPayout('pharmacies', val, 'pharmacy');
+                if (success) setShowPharmacyModal(false);
+            }}
+        />
       )}
       {showLabModal && (
-        <EntityModal title="Add Laboratory" onClose={() => setShowLabModal(false)} fields={[{ name: 'name', label: 'Lab Name' }, { name: 'location', label: 'Location' }, { name: 'phone', label: 'Phone' }, { name: 'email', label: 'Email' }]} onSave={async (val) => {
-            const { error } = await supabase.from('labs').insert([val]);
-            if (!error) { addNotification('Success', 'Lab added', 'success'); fetchLabs(); setShowLabModal(false); }
-        }}/>
+        <EntityModal 
+            title="Add Laboratory (Auto-Configure Payout)" 
+            onClose={() => setShowLabModal(false)} 
+            isUploading={isCreatingSubaccount}
+            fields={commonProviderFields} 
+            onSave={async (val) => {
+                const success = await handleCreateProviderWithPayout('labs', val, 'lab');
+                if (success) setShowLabModal(false);
+            }}
+        />
       )}
+
+
       {showMedicationModal && (
         <EntityModal title="Add Medication" onClose={() => setShowMedicationModal(false)} fields={[{ name: 'name', label: 'Drug Name' }, { name: 'description', label: 'Description' }, { name: 'price', label: 'Price (₦)', type: 'number' }, { name: 'stock_quantity', label: 'Stock', type: 'number' }]} onSave={async (val) => {
             const { error } = await supabase.from('medications').insert([{ ...val, pharmacy_id: selectedPharmacyId, price: parseFloat(val.price), stock_quantity: parseInt(val.stock_quantity) || 0 }]);

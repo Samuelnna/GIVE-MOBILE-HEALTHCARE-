@@ -246,44 +246,44 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [reminderMed, setReminderMed] = useState<Medication | null>(null);
-  const [realMeds, setRealMeds] = useState<Medication[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [realMeds, setRealMeds] = useState<Medication[]>(pharmacyItems || []);
+  const [loading, setLoading] = useState(!(pharmacyItems && pharmacyItems.length));
 
   const fetchRealMeds = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('medications')
-      .select('*, pharmacies(name, location)');
-    if (!error && data) {
-      setRealMeds(data.map(m => ({
-        id: m.id,
-        name: m.name,
-        dosage: m.description || 'As directed',
-        price: m.price,
-        requiresPrescription: false,
-        usageInstructions: 'Follow the advice of your pharmacist.',
-        sideEffects: [],
-        warnings: 'Keep out of reach of children.',
-        pharmacyName: m.pharmacies?.name,
-        pharmacyLocation: m.pharmacies?.location
-      })) as Medication[]);
+    if (!(pharmacyItems && pharmacyItems.length)) setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('medications')
+        .select('*, pharmacies(name, location)');
+      if (!error && data) {
+        setRealMeds(data.map(m => ({
+          id: m.id,
+          name: m.name,
+          dosage: m.description || 'As directed',
+          price: m.price,
+          requiresPrescription: false,
+          usageInstructions: 'Follow the advice of your pharmacist.',
+          sideEffects: [],
+          warnings: 'Keep out of reach of children.',
+          pharmacyName: m.pharmacies?.name,
+          pharmacyLocation: m.pharmacies?.location
+        })) as Medication[]);
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => {
+    // Robust Fetch on Entry: Always fetch fresh data to ensure nothing "sleeps"
     fetchRealMeds();
 
-    const channel = supabase
-      .channel('medications_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'medications' }, () => {
-        fetchRealMeds();
-      })
+    // Set up real-time listener for medications
+    const channel = supabase.channel('medications_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'medications' }, fetchRealMeds)
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   // Use real data from DB, fallback to passed items
