@@ -168,6 +168,10 @@ export default function AboutPage() {
                   <a className="text-white hover:text-emerald-200 break-all" href="mailto:mobilehealthadmin@gmail.com">mobilehealthadmin@gmail.com</a>
                 </li>
                 <li>
+                  <p className="text-white/50 text-xs font-black uppercase tracking-widest">Support line</p>
+                  <a className="text-white hover:text-emerald-200" href="tel:+2348161502448">+234 816 150 2448</a>
+                </li>
+                <li>
                   <p className="text-white/50 text-xs font-black uppercase tracking-widest">Web</p>
                   <a className="text-white hover:text-emerald-200" href="https://mobiledoc247.com" target="_blank" rel="noreferrer">mobiledoc247.com</a>
                 </li>

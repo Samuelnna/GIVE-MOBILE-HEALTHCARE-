@@ -24,7 +24,9 @@ const Footer: React.FC = () => {
             </ul>
           </div>
           <div>
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">HQ</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Support</p>
+            <a href="tel:+2348161502448" className="text-slate-300 text-sm font-semibold hover:text-white">+234 816 150 2448</a>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mt-5 mb-3">HQ</p>
             <p className="text-slate-300 text-sm font-medium leading-relaxed">
               No 5 Amechi Awkunanaw<br />Enugu State, Nigeria
             </p>

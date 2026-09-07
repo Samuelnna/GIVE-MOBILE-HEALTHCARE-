@@ -10,7 +10,6 @@ import {
   BotIcon, 
   SparklesIcon, 
   CheckCircleIcon, 
-  CpuChipIcon 
 } from './IconComponents';
 import { runTriageAIAction } from '../app/actions/ai';
 
@@ -95,8 +94,8 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
         <header className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 flex justify-between items-center relative overflow-hidden">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
           <div className="flex items-center gap-3 relative z-10">
-            <div className="bg-emerald-500/20 p-2 rounded-lg border border-emerald-500/30">
-              <CpuChipIcon className="h-6 w-6 text-emerald-400 animate-pulse" />
+            <div className="bg-white p-1 rounded-lg border border-white/30 shadow-sm">
+              <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI Triage" className="h-8 w-8 rounded-md object-contain" />
             </div>
                 <div>
                     <h3 className="font-black text-lg tracking-tight uppercase">MobileDoc AI Triage</h3>
@@ -120,7 +119,7 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
                   ? 'bg-white border-slate-200 text-slate-400' 
                   : 'bg-slate-900 border-slate-800 text-emerald-400 shadow-emerald-500/10'
               }`}>
-                {msg.role === 'user' ? <UserCircleIcon className="w-7 h-7" /> : <CpuChipIcon className="w-6 h-6" />}
+                {msg.role === 'user' ? <UserCircleIcon className="w-7 h-7" /> : <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="w-8 h-8 rounded-lg object-contain" />}
               </div>
               <div className={`group relative px-5 py-3 rounded-2xl max-w-[80%] shadow-sm transition-all hover:shadow-md ${
                 msg.role === 'user' 
@@ -140,7 +139,7 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
           {isLoading && (
             <div className="flex items-start gap-4">
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-900 border-slate-800 flex items-center justify-center animate-pulse shadow-lg shadow-emerald-500/10">
-                <CpuChipIcon className="w-6 h-6 text-emerald-400" />
+                <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="w-8 h-8 rounded-lg object-contain" />
               </div>
               <div className="px-5 py-4 bg-white rounded-2xl rounded-tl-none border border-slate-100 shadow-sm flex items-center gap-2">
                 <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></span>
