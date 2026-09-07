@@ -169,7 +169,7 @@ export default function AboutPage() {
                 </li>
                 <li>
                   <p className="text-white/50 text-xs font-black uppercase tracking-widest">Support line</p>
-                  <a className="text-white hover:text-emerald-200" href="tel:+2348161502448">+234 816 150 2448</a>
+                  <a className="text-white hover:text-emerald-200" href="tel:+2349015581259">09015581259</a>
                 </li>
                 <li>
                   <p className="text-white/50 text-xs font-black uppercase tracking-widest">Web</p>
