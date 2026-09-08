@@ -29,7 +29,7 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
   const isProfessional = user.userType === 'professional';
 
   useEffect(() => {
-    if ('permission' in Notification) {
+    if (typeof Notification !== 'undefined' && 'permission' in Notification) {
       setPermissionStatus(Notification.permission);
     }
   }, []);

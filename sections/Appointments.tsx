@@ -43,8 +43,8 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onStartV
     const reminderKey = `reminder_${currentAppointment.id}`;
     localStorage.setItem(reminderKey, 'true');
 
-    // Request notification permission if not already granted
-    if (Notification.permission === 'default') {
+    // Request notification permission if the browser supports it
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
         Notification.requestPermission();
     }
 
@@ -52,7 +52,7 @@ const AppointmentCard: React.FC<AppointmentCardProps> = ({ appointment, onStartV
     setIsReminderSet(true);
 
     // If permission is granted, we could schedule a browser notification here
-    if (Notification.permission === 'granted') {
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         // This is a simple simulation of a timed notification
         // In production, this would be handled by a service worker or backend cron job
         console.log(`Notification scheduled for appointment: ${currentAppointment.id}`);

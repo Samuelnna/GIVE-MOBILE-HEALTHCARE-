@@ -24,7 +24,7 @@ export const requestNotificationPermission = async (): Promise<NotificationPermi
  * @param {NotificationOptions} [options] Optional parameters for the notification (e.g., body, icon).
  */
 export const showNotification = (title: string, options?: NotificationOptions) => {
-  if (Notification.permission === 'granted') {
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
     new Notification(title, options);
   } else {
     console.log('Notification permission has not been granted.');
