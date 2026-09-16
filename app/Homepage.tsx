@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Footer from '../components/Footer';
 
 interface HomepageProps {
@@ -15,6 +15,8 @@ const services = [
 ];
 
 export default function Homepage({ onGetStarted }: HomepageProps) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-[#f5faf8] text-slate-800">
       <header className="sticky top-0 z-40 border-b border-emerald-100 bg-white/90 backdrop-blur-md">
@@ -23,10 +25,32 @@ export default function Homepage({ onGetStarted }: HomepageProps) {
             <img src="/mobiledoclogo.jpeg" alt="MobileDoc" className="h-11 w-11 rounded-xl object-contain" />
             <span className="text-lg font-black tracking-tight text-slate-950">MobileDoc</span>
           </a>
-          <nav className="flex items-center gap-4 text-sm font-bold">
+          <nav className="hidden items-center gap-4 text-sm font-bold sm:flex">
             <a href="/about" className="hidden text-slate-500 hover:text-emerald-700 sm:inline">About</a>
             <a href="/careers" className="hidden text-slate-500 hover:text-emerald-700 sm:inline">Careers</a>
           </nav>
+          <div className="relative sm:hidden">
+            <button
+              type="button"
+              aria-label={isMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+              aria-expanded={isMenuOpen}
+              onClick={() => setIsMenuOpen((open) => !open)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-700 transition hover:border-emerald-300 hover:text-emerald-700"
+            >
+              <span className="sr-only">Menu</span>
+              <span className="flex w-5 flex-col gap-1.5" aria-hidden="true">
+                <span className="h-0.5 w-full rounded-full bg-current" />
+                <span className="h-0.5 w-full rounded-full bg-current" />
+                <span className="h-0.5 w-full rounded-full bg-current" />
+              </span>
+            </button>
+            {isMenuOpen && (
+              <div className="absolute right-0 top-12 z-50 w-44 rounded-2xl border border-slate-200 bg-white p-2 text-sm font-bold shadow-xl shadow-slate-900/10">
+                <a href="/about" onClick={() => setIsMenuOpen(false)} className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700">About</a>
+                <a href="/careers" onClick={() => setIsMenuOpen(false)} className="block rounded-xl px-4 py-3 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700">Careers</a>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
