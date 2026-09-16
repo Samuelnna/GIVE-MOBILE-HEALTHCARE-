@@ -7,9 +7,10 @@ import { useNotification } from './contexts/NotificationContext';
 interface AuthProps {
   onLogin: (user: User, isSignUp: boolean) => void;
   onProfessionalSignUp: (user: User, details: any) => void;
+  onBackToHome?: () => void;
 }
 
-const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
+const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome }) => {
   const [authStep, setAuthStep] = useState<'initial' | 'login' | 'patient_signup' | 'prof_signup_basic' | 'prof_signup_role' | 'prof_signup_license' | 'patient_portal' | 'prof_portal' | 'admin_portal'>('initial');
   
   // Form State
@@ -230,6 +231,11 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp }) => {
 
   const renderInitialScreen = () => (
     <div className="space-y-4">
+      {onBackToHome && (
+        <button onClick={onBackToHome} className="mb-2 text-sm font-bold text-slate-500 transition-colors hover:text-emerald-700">
+          ← Back to homepage
+        </button>
+      )}
       <h2 className="text-2xl font-bold text-center text-slate-800 mb-6">SELECT YOUR ROLE</h2>
       <button
         onClick={() => setAuthStep('patient_portal')}

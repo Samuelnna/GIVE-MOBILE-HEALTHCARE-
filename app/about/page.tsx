@@ -58,6 +58,7 @@ export default function AboutPage() {
           </a>
           <nav className="flex items-center gap-5 text-sm font-bold">
             <a href="/about" className="text-emerald-700">About</a>
+            <a href="/careers" className="text-slate-500 hover:text-slate-900">Careers</a>
             <a href="/" className="text-slate-500 hover:text-slate-900">Open app</a>
             <a href="/admin" className="text-slate-400 hover:text-slate-700 hidden sm:inline">Admin</a>
           </nav>

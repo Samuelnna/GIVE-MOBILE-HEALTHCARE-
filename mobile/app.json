@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "MobileDoc",
+    "newArchEnabled": true,
+    "slug": "mobiledoc",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/mobiledoclogo.jpeg",
+    "scheme": "mobiledoc",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mobiledoc.healthcare",
+      "infoPlist": {
+        "NSCameraUsageDescription": "MobileDoc uses the camera for video consultations.",
+        "NSMicrophoneUsageDescription": "MobileDoc uses the microphone for video consultations."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#064E3B",
+        "foregroundImage": "./assets/images/mobiledoclogo.jpeg"
+      },
+      "package": "com.mobiledoc.healthcare",
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "CAMERA",
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/mobiledoclogo.jpeg"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/mobiledoclogo.jpeg",
+          "resizeMode": "contain",
+          "backgroundColor": "#064E3B"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow MobileDoc to access photos for license verification and your profile."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

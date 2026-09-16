@@ -20,6 +20,7 @@ const Footer: React.FC = () => {
             <p className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3">Company</p>
             <ul className="space-y-2 text-sm font-semibold">
               <li><a href="/about" className="text-slate-300 hover:text-white">About</a></li>
+              <li><a href="/careers" className="text-slate-300 hover:text-white">Careers</a></li>
               <li><a href="/about#contact" className="text-slate-300 hover:text-white">Contact</a></li>
             </ul>
           </div>

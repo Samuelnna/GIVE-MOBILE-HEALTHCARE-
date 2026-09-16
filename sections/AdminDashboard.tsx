@@ -111,6 +111,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const [isLoadingLab, setIsLoadingLab] = useState(true);
   const [referrals, setReferrals] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
+    const [careerApplications, setCareerApplications] = useState<any[]>([]);
   
   const [showHospitalModal, setShowHospitalModal] = useState(false);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
@@ -146,6 +147,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
       fetchHealthTopics(),
       fetchReferrals(),
       fetchPrescriptions(),
+    fetchCareerApplications(),
       fetchHospAppts(),
       fetchAllProfiles(),
       fetchPayments(),
@@ -333,6 +335,24 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         .order('created_at', { ascending: false });
     if (!error) setPrescriptions(data || []);
   };
+
+    const fetchCareerApplications = async () => {
+        const { data, error } = await supabase
+            .from('career_applications')
+            .select('*')
+            .order('created_at', { ascending: false });
+        if (!error) setCareerApplications(data || []);
+    };
+
+    const updateCareerApplicationStatus = async (id: string, status: string) => {
+        const { error } = await supabase.from('career_applications').update({ status }).eq('id', id);
+        if (error) {
+            addNotification('Error', error.message, 'error');
+            return;
+        }
+        addNotification('Application Updated', 'The application status was saved.', 'success');
+        fetchCareerApplications();
+    };
 
   const fetchVerifications = async () => {
     try {
@@ -553,6 +573,37 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         <h2 className="text-xl sm:text-2xl font-bold text-slate-800 text-center sm:text-left">Admin Dashboard</h2>
         <button onClick={() => setShowBlogModal(true)} className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 text-sm sm:text-base">New Blog Post</button>
       </div>
+
+            <section className="bg-white rounded-xl border border-emerald-100 shadow-md overflow-hidden">
+                <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                    <div>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">People interested in joining</p>
+                        <h3 className="mt-1 text-xl font-black text-slate-800">Career Applications <span className="ml-1 rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">{careerApplications.length}</span></h3>
+                    </div>
+                    <button onClick={fetchCareerApplications} className="self-start text-xs font-black uppercase tracking-wider text-emerald-700 hover:text-emerald-900">Refresh applications</button>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full min-w-[900px] text-left text-sm">
+                        <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            <tr><th className="p-4">Applicant</th><th className="p-4">Contact</th><th className="p-4">Role</th><th className="p-4">Hospital</th><th className="p-4">Digital healthcare</th><th className="p-4">Status</th><th className="p-4">Date</th></tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {careerApplications.map((application) => (
+                                <tr key={application.id} className="hover:bg-emerald-50/30">
+                                    <td className="p-4"><p className="font-bold text-slate-800">{application.name}</p><p className="text-xs text-slate-500">{application.email}</p></td>
+                                    <td className="p-4"><a href={`tel:${application.phone}`} className="font-semibold text-emerald-700 hover:underline">{application.phone}</a></td>
+                                    <td className="p-4"><span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">{application.specialty}</span></td>
+                                    <td className="p-4 text-slate-600">{application.hospital || 'Not provided'}</td>
+                                    <td className="p-4 font-semibold">{application.experienced_in_digital_healthcare ? <span className="text-emerald-700">Yes</span> : <span className="text-slate-500">No</span>}</td>
+                                    <td className="p-4"><select value={application.status} onChange={(event) => updateCareerApplicationStatus(application.id, event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold capitalize text-slate-700 outline-none focus:border-emerald-500"><option value="new">New</option><option value="reviewing">Reviewing</option><option value="contacted">Contacted</option><option value="closed">Closed</option></select></td>
+                                    <td className="p-4 whitespace-nowrap text-xs text-slate-500">{new Date(application.created_at).toLocaleDateString()}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                    {careerApplications.length === 0 && <p className="p-10 text-center text-sm font-medium text-slate-400">No career applications yet.</p>}
+                </div>
+            </section>
 
       {/* Platform Configuration (Revenue Sharing) */}
       {/* Platform Configuration (Revenue Sharing) */}

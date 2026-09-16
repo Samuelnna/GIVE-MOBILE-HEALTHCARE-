@@ -27,7 +27,7 @@ import Footer from './components/Footer';
 import { supabase } from './src/supabaseClient';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
 
-const App: React.FC = () => {
+const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const [initialLoading, setInitialLoading] = useState(() => {
     if (typeof window === 'undefined') return true;
     return !localStorage.getItem('currentUser');
@@ -540,7 +540,7 @@ const App: React.FC = () => {
     }
   };
 
-  if (!currentUser) return <Auth onLogin={(u) => { setCurrentUser(u); localStorage.setItem('currentUser', JSON.stringify(u)); }} onProfessionalSignUp={() => {}} />;
+  if (!currentUser) return <Auth onLogin={(u) => { setCurrentUser(u); localStorage.setItem('currentUser', JSON.stringify(u)); }} onProfessionalSignUp={() => {}} onBackToHome={onBackToHome} />;
   if (currentUser.userType === 'professional' && currentUser.status !== 'active') return <PendingDashboard user={currentUser} onLogout={handleLogout} onEditProfile={() => setActiveSection('Profile')} />;
 
   const LoadingOverlay = () => (
