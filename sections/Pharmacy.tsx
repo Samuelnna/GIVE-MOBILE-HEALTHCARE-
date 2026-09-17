@@ -4,7 +4,8 @@ import { supabase } from '../src/supabaseClient';
 import type { Medication, CartItem, Reminder, MedicationRecord } from '../types';
 import MedicationDetailModal from '../components/MedicationDetailModal';
 import ReminderModal from '../components/ReminderModal';
-import { DocumentTextIcon, MinusIcon, PlusIcon, UploadIcon, SparklesIcon, BellIcon, CalendarIcon } from '../components/IconComponents';
+import { DocumentTextIcon, MinusIcon, PlusIcon, UploadIcon, SparklesIcon, BellIcon, CalendarIcon, SearchIcon, ShoppingCartIcon, CheckCircleIcon } from '../components/IconComponents';
+import { getAuthedUserId } from '../src/supabaseClient';
 
 const ITEMS_PER_PAGE = 6;
 type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc';
@@ -30,15 +31,6 @@ const MedicationCard: React.FC<{
     onUpdateCart: (med: Medication, quantity: number) => void;
 }> = ({ med, onSelect, cartItem, onUpdateCart }) => {
     
-    const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-        if (event.target.files && event.target.files[0]) {
-            setUploadedFile(event.target.files[0]);
-        }
-    };
-
     return (
       <div 
         onClick={() => onSelect(med)}
@@ -52,7 +44,7 @@ const MedicationCard: React.FC<{
               <p className="text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1">
                   📍 {(med as any).pharmacyName || 'Partner Pharmacy'} • {(med as any).pharmacyLocation || 'Multiple Locations'}
               </p>
-              {med.requiresPrescription && (
+                {med.requiresPrescription && (
                 <div className="inline-flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full w-fit">
                     <DocumentTextIcon className="h-4 w-4" />
                     <span>Prescription Required</span>
@@ -64,22 +56,7 @@ const MedicationCard: React.FC<{
             <div className="flex items-center justify-between mt-4">
                 <p className="text-lg font-bold text-sky-600">₦{med.price.toLocaleString()}</p>
                 {med.requiresPrescription ? (
-                    <>
-                        <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf" className="hidden" />
-                        <button 
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                if (!uploadedFile) {
-                                    fileInputRef.current?.click();
-                                }
-                            }}
-                            disabled={!!uploadedFile}
-                            className="px-4 py-2 text-white font-semibold rounded-lg transition-colors z-10 flex items-center gap-2 text-sm disabled:bg-green-500 disabled:cursor-not-allowed bg-sky-600 hover:bg-sky-700"
-                        >
-                            <UploadIcon className="h-4 w-4" />
-                            {uploadedFile ? 'Uploaded' : 'Upload Rx'}
-                        </button>
-                    </>
+                    <span className="text-xs font-bold text-amber-700">Upload prescription above</span>
                 ) : (
                     cartItem ? (
                         <QuantitySelector item={cartItem} onUpdate={(q) => onUpdateCart(med, q)} />
@@ -96,11 +73,6 @@ const MedicationCard: React.FC<{
                     )
                 )}
             </div>
-            {uploadedFile && (
-                <p className="text-xs text-slate-500 mt-2 text-right truncate">
-                    File: {uploadedFile.name}
-                </p>
-            )}
         </div>
       </div>
     );
@@ -246,6 +218,10 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [sortOption, setSortOption] = useState<SortOption>('name-asc');
   const [reminderMed, setReminderMed] = useState<Medication | null>(null);
+    const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
+    const [isUploadingPrescription, setIsUploadingPrescription] = useState(false);
+    const [prescriptionSubmitted, setPrescriptionSubmitted] = useState(false);
+    const prescriptionInputRef = useRef<HTMLInputElement>(null);
   const [realMeds, setRealMeds] = useState<Medication[]>(pharmacyItems || []);
   const [loading, setLoading] = useState(!(pharmacyItems && pharmacyItems.length));
 
@@ -261,12 +237,13 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
           name: m.name,
           dosage: m.description || 'As directed',
           price: m.price,
-          requiresPrescription: false,
+          requiresPrescription: !!m.requires_prescription,
           usageInstructions: 'Follow the advice of your pharmacist.',
           sideEffects: [],
           warnings: 'Keep out of reach of children.',
           pharmacyName: m.pharmacies?.name,
-          pharmacyLocation: m.pharmacies?.location
+          pharmacyLocation: m.pharmacies?.location,
+          pharmacy_id: m.pharmacy_id,
         })) as Medication[]);
       }
     } finally {
@@ -311,9 +288,39 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
             default: return 0;
         }
     });
-  }, [searchTerm, sortOption, availableMedications]);
+    }, [searchTerm, selectedLocation, sortOption, availableMedications]);
 
   const handleLoadMore = () => setVisibleCount(prev => prev + ITEMS_PER_PAGE);
+
+    const handlePrescriptionUpload = async () => {
+        if (!prescriptionFile || isUploadingPrescription) return;
+        const userId = await getAuthedUserId();
+        if (!userId) return;
+
+        setIsUploadingPrescription(true);
+        const safeName = prescriptionFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+        const filePath = `${userId}/${Date.now()}-${safeName}`;
+        const { error: uploadError } = await supabase.storage.from('pharmacy-prescriptions').upload(filePath, prescriptionFile, { upsert: false });
+
+        if (uploadError) {
+            setIsUploadingPrescription(false);
+            return;
+        }
+
+        const { error: requestError } = await supabase.from('pharmacy_prescription_requests').insert({
+            patient_id: userId,
+            file_url: filePath,
+            file_name: prescriptionFile.name,
+            status: 'pending',
+        });
+
+        if (!requestError) {
+            setPrescriptionSubmitted(true);
+            setPrescriptionFile(null);
+            if (prescriptionInputRef.current) prescriptionInputRef.current.value = '';
+        }
+        setIsUploadingPrescription(false);
+    };
 
   const visibleMeds = sortedAndFilteredMeds.slice(0, visibleCount);
   const cartItemsMap = useMemo(() => new Map(cartItems.map(item => [item.id, item])), [cartItems]);
@@ -327,18 +334,38 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
 
   const ShopView = () => (
     <>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <input
-              type="text"
-              placeholder="Medication name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 transition"
-          />
+            <div className="mb-8 grid gap-5 lg:grid-cols-[1.4fr_0.6fr]">
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5 sm:p-6">
+                    <div className="flex items-start gap-3">
+                        <div className="rounded-xl bg-white p-2 text-emerald-700 shadow-sm"><DocumentTextIcon className="h-6 w-6" /></div>
+                        <div>
+                            <h3 className="font-black text-slate-900">Have a prescription?</h3>
+                            <p className="mt-1 text-sm leading-relaxed text-slate-600">Upload a clear photo or PDF and our pharmacy team will review it before helping you complete your order.</p>
+                        </div>
+                    </div>
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+                        <input ref={prescriptionInputRef} type="file" accept="image/*,.pdf" onChange={(event) => setPrescriptionFile(event.target.files?.[0] || null)} className="block w-full rounded-xl border border-emerald-200 bg-white text-sm file:mr-3 file:border-0 file:bg-emerald-100 file:px-4 file:py-3 file:font-bold file:text-emerald-800" />
+                        <button type="button" onClick={handlePrescriptionUpload} disabled={!prescriptionFile || isUploadingPrescription} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><UploadIcon className="h-4 w-4" />{isUploadingPrescription ? 'Processing...' : 'Process prescription'}</button>
+                    </div>
+                    {prescriptionFile && <p className="mt-2 text-xs font-semibold text-emerald-800">Selected: {prescriptionFile.name}</p>}
+                    {prescriptionSubmitted && <p className="mt-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircleIcon className="h-4 w-4" /> Prescription received. Our pharmacy team will review it.</p>}
+                </div>
+                <div className="rounded-2xl bg-slate-950 p-5 text-white sm:p-6">
+                    <p className="text-xs font-black uppercase tracking-widest text-emerald-300">Simple pharmacy care</p>
+                    <p className="mt-3 text-xl font-black">Find it. Add it. Process it.</p>
+                    <p className="mt-2 text-sm leading-relaxed text-slate-300">Search our available catalog, add non-prescription items, then process your order for delivery or pickup.</p>
+                </div>
+            </div>
+            <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_220px]">
+                    <label className="relative block">
+                        <span className="sr-only">Search medication</span>
+                        <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+                        <input type="search" placeholder="Search by medication name..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }} className="w-full rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" />
+                    </label>
           <select 
             value={selectedLocation} 
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 transition bg-white"
+            className="w-full rounded-xl border border-slate-200 bg-white p-3.5 font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
           >
               {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
           </select>
@@ -349,7 +376,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
               <option value="price-desc">Price: High to Low</option>
           </select>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {visibleMeds.map(med => (
           <MedicationCard key={med.id} med={med} onSelect={setSelectedMed} cartItem={cartItemsMap.get(med.id)} onUpdateCart={onUpdateCart} />
           ))}
@@ -402,12 +429,18 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
   return (
     <>
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white p-8 rounded-lg shadow-md mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">Pharmacy</h1>
-          <p className="text-slate-600">Order prescriptions, manage your medications, and use our AI tools.</p>
+                <div className="mb-8 overflow-hidden rounded-2xl bg-gradient-to-br from-emerald-950 via-teal-900 to-emerald-700 p-6 text-white shadow-lg sm:p-8">
+                    <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200">MobileDoc e-pharmacy</p>
+                            <h1 className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">Your medicine, made easier.</h1>
+                            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-emerald-50/80 sm:text-base">Find medicines from our partner pharmacy network, upload a prescription for review, and process your order for delivery or pickup.</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-emerald-50"><ShoppingCartIcon className="h-5 w-5" /> {cartItems.reduce((sum, item) => sum + item.quantity, 0)} in cart</div>
+                    </div>
         </div>
 
-        <div className="bg-white p-8 rounded-lg shadow-md">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8">
             <div className="border-b border-slate-200">
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     <button onClick={() => setActiveTab('shop')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'shop' ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>Shop</button>

@@ -112,6 +112,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const [referrals, setReferrals] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
     const [careerApplications, setCareerApplications] = useState<any[]>([]);
+    const [pharmacyPrescriptionRequests, setPharmacyPrescriptionRequests] = useState<any[]>([]);
   
   const [showHospitalModal, setShowHospitalModal] = useState(false);
   const [showPharmacyModal, setShowPharmacyModal] = useState(false);
@@ -147,7 +148,8 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
       fetchHealthTopics(),
       fetchReferrals(),
       fetchPrescriptions(),
-    fetchCareerApplications(),
+            fetchCareerApplications(),
+            fetchPharmacyPrescriptionRequests(),
       fetchHospAppts(),
       fetchAllProfiles(),
       fetchPayments(),
@@ -335,6 +337,33 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         .order('created_at', { ascending: false });
     if (!error) setPrescriptions(data || []);
   };
+
+    const fetchPharmacyPrescriptionRequests = async () => {
+        const { data, error } = await supabase
+            .from('pharmacy_prescription_requests')
+            .select('*, patient:profiles!pharmacy_prescription_requests_patient_id_fkey(full_name, email)')
+            .order('created_at', { ascending: false });
+        if (!error) setPharmacyPrescriptionRequests(data || []);
+    };
+
+    const updatePharmacyPrescriptionStatus = async (id: string, status: string) => {
+        const { error } = await supabase.from('pharmacy_prescription_requests').update({ status }).eq('id', id);
+        if (error) {
+            addNotification('Error', error.message, 'error');
+            return;
+        }
+        addNotification('Prescription Updated', 'The prescription request status was saved.', 'success');
+        fetchPharmacyPrescriptionRequests();
+    };
+
+    const openPharmacyPrescription = async (filePath: string) => {
+        const { data, error } = await supabase.storage.from('pharmacy-prescriptions').createSignedUrl(filePath, 600);
+        if (error || !data?.signedUrl) {
+            addNotification('File unavailable', 'The prescription file could not be opened.', 'error');
+            return;
+        }
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    };
 
     const fetchCareerApplications = async () => {
         const { data, error } = await supabase
@@ -971,6 +1000,30 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                     </tbody>
                 </table>
                 {displayPayments.length === 0 && <p className="text-center py-4 text-slate-500 italic">No payments recorded yet.</p>}
+            </div>
+        </div>
+
+        {/* Prescription Review Queue */}
+        <div className="bg-white p-6 rounded-xl shadow-md border border-emerald-100">
+            <div className="flex justify-between items-center mb-4 border-b pb-2">
+                <h3 className="text-xl font-bold text-slate-800">Prescription Review Queue</h3>
+                <button onClick={fetchPharmacyPrescriptionRequests} className="text-emerald-700 text-xs font-bold hover:underline">Refresh</button>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">Patient</th><th className="pb-2">File</th><th className="pb-2">Submitted</th><th className="pb-2">Status</th></tr></thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {pharmacyPrescriptionRequests.map(request => (
+                            <tr key={request.id}>
+                                <td className="py-3"><p className="font-bold text-slate-700">{request.patient?.full_name || 'Patient'}</p><p className="text-xs text-slate-500">{request.patient?.email}</p></td>
+                                <td className="py-3"><button onClick={() => openPharmacyPrescription(request.file_url)} className="font-bold text-emerald-700 hover:underline">{request.file_name}</button></td>
+                                <td className="py-3 text-slate-500">{new Date(request.created_at).toLocaleDateString()}</td>
+                                <td className="py-3"><select value={request.status} onChange={(event) => updatePharmacyPrescriptionStatus(request.id, event.target.value)} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-bold capitalize"><option value="pending">Pending</option><option value="reviewing">Reviewing</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="fulfilled">Fulfilled</option></select></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+                {pharmacyPrescriptionRequests.length === 0 && <p className="py-6 text-center text-sm text-slate-400">No prescription uploads yet.</p>}
             </div>
         </div>
 

@@ -22,7 +22,7 @@ interface PatientRecordsProps {
     onPurchasePrescription: (prescription: any) => void;
 }
 
-const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection, onScheduleFromReferral, onPurchasePrescription, paymentHistory = [] }) => {
+const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection, onScheduleFromReferral, onPurchasePrescription, paymentHistory = [], doctors = [], hospitals = [], labTests = [] }) => {
   const isProfessional = user?.userType === 'professional';
   const { addNotification } = useNotification();
   const [activeTab, setActiveTab] = useState<'triage' | 'appointments' | 'referrals' | 'prescriptions' | 'payments'>(isProfessional ? 'appointments' : 'triage');
@@ -138,9 +138,16 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                             <p className="text-sm text-slate-600 mb-2"><strong>Diagnosis:</strong> {r.diagnosis}</p>
                             <p className="text-sm text-slate-600 mb-4"><strong>Treatment Plan:</strong> {r.treatment_plan}</p>
                             <div className="flex gap-4">
-                                {r.data?.referrals?.map((ref: any, idx: number) => (
-                                    <button key={`ref-${r.id}-${ref.name || idx}-${idx}`} onClick={() => setActiveSection('Doctors')} className="text-xs font-bold text-sky-600 hover:underline">Book with {ref.name}</button>
-                                ))}
+                                {r.data?.referrals?.map((ref: any, idx: number) => {
+                                    const type = ref.type === 'Lab' ? 'Laboratory' : ref.type;
+                                    const available = type === 'Doctor' ? doctors.length : type === 'Hospital' ? hospitals.length : type === 'Laboratory' ? labTests.length : 0;
+                                    const section = type === 'Doctor' ? 'Doctors' : type === 'Hospital' ? 'Hospitals' : type === 'Laboratory' ? 'Labs' : 'Pharmacy';
+                                    return (
+                                        <button key={`ref-${r.id}-${type}-${idx}`} onClick={() => setActiveSection(section)} className="rounded-lg bg-emerald-50 px-3 py-2 text-left text-xs font-bold text-emerald-700 hover:bg-emerald-100">
+                                            {available > 0 ? `View ${type} options` : `Explore ${type} care`}
+                                        </button>
+                                    );
+                                })}
                             </div>
                         </div>
                     ))}

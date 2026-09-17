@@ -1,24 +1,39 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import type { ChatMessage, Referral } from '../types';
+import type { ChatMessage } from '../types';
 import { 
-  ChatIcon, 
   CloseIcon, 
   SendIcon, 
   UserCircleIcon, 
-  BotIcon, 
-  SparklesIcon, 
   CheckCircleIcon, 
 } from './IconComponents';
 import { runTriageAIAction } from '../app/actions/ai';
+import type { Doctor, Hospital, LabTest } from '../types';
 
 interface TriageBotProps {
   onClose: () => void;
   onComplete: (result: any) => void;
+  doctors?: Doctor[];
+  hospitals?: Hospital[];
+  labTests?: LabTest[];
 }
 
-const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
+const extractTriageResult = (text: string) => {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+
+  try {
+    const result = JSON.parse(text.slice(start, end + 1));
+    if (!['Emergency', 'Urgent', 'Routine'].includes(result?.triageLevel)) return null;
+    return result;
+  } catch {
+    return null;
+  }
+};
+
+const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete, doctors = [], hospitals = [], labTests = [] }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -29,7 +44,7 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
   useEffect(() => {
     setMessages([{
       role: 'model',
-      text: "Hello! I'm your AI Triage Assistant. I can help assess your symptoms and recommend the next steps for your care. What symptoms are you experiencing today?"
+      text: "Hello. I can help assess your symptoms with focused questions and guide you to the right next step. You can write in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa. What are you experiencing?"
     }]);
   }, []);
 
@@ -55,22 +70,17 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
 
       const responseText = res.text as string;
 
-      if (responseText.includes('{') && responseText.includes('triageLevel')) {
-        try {
-          const cleaned = responseText.replace(/```json\n?/, '').replace(/\n?```/, '').trim();
-          const data = JSON.parse(cleaned);
-          setTriageResult(data);
-          setIsFinished(true);
-          setMessages(prev => [
-            ...prev, 
-            { 
-              role: 'model', 
-              text: `I've completed my assessment. Based on your symptoms, I recommend ${data.triageLevel.toLowerCase()} care. I've prepared a full report for your records.` 
-            }
-          ]);
-        } catch (e) {
-          setMessages(prev => [...prev, { role: 'model', text: responseText }]);
-        }
+      const data = extractTriageResult(responseText);
+      if (data) {
+        setTriageResult(data);
+        setIsFinished(true);
+        setMessages(prev => [
+          ...prev,
+          {
+            role: 'model',
+            text: `Assessment complete. The recommended level is ${data.triageLevel.toLowerCase()} care. Review the next step below.`
+          }
+        ]);
       } else {
         setMessages(prev => [...prev, { role: 'model', text: responseText }]);
       }
@@ -89,72 +99,69 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4">
-      <div className="w-full max-w-xl h-[85vh] max-h-[800px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
-        <header className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 flex justify-between items-center relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
-          <div className="flex items-center gap-3 relative z-10">
-            <div className="bg-white p-1 rounded-lg border border-white/30 shadow-sm">
-              <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI Triage" className="h-8 w-8 rounded-md object-contain" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-0 sm:p-4">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl sm:h-[min(760px,calc(100vh-2rem))] sm:max-w-2xl sm:rounded-2xl">
+        <header className="border-b border-slate-200 bg-white px-4 py-4 sm:px-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="rounded-xl bg-emerald-50 p-1.5">
+                <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI Triage" className="h-9 w-9 rounded-lg object-contain" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-black tracking-tight text-slate-900 sm:text-lg">AI Triage Assistant</h3>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700">Focused symptom guidance</p>
+              </div>
             </div>
-                <div>
-                    <h3 className="font-black text-lg tracking-tight uppercase">MobileDoc AI Triage</h3>
-                    <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">Neural Assessment Live</p>
-                </div>
+            <button onClick={onClose} aria-label="Close triage assistant" className="rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700">
+              <CloseIcon className="h-5 w-5" />
+            </button>
           </div>
-          <button onClick={onClose} className="hover:bg-white/10 p-2 rounded-full transition-all relative z-10">
-            <CloseIcon className="h-5 w-5 text-slate-400" />
-          </button>
+          <div className="mt-4 flex items-center justify-between gap-4 text-xs font-bold text-slate-500">
+            <span>Focused symptom assessment</span>
+            <span className="text-emerald-700">Ask anything relevant</span>
+          </div>
         </header>
 
         <div 
           ref={chatContainerRef} 
-          className="flex-1 p-6 overflow-y-auto bg-[#F8FAFC] space-y-6 scroll-smooth" 
-          style={{ backgroundImage: 'radial-gradient(#e2e8f0 1px, transparent 1px)', backgroundSize: '20px 20px' }}
+          className="flex-1 space-y-5 overflow-y-auto bg-slate-50 p-4 scroll-smooth sm:p-6"
         >
           {messages.map((msg, index) => (
-            <div key={index} className={`flex items-start gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-              <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center shadow-sm border ${
+            <div key={index} className={`flex items-end gap-2.5 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
+              <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border shadow-sm ${
                 msg.role === 'user' 
                   ? 'bg-white border-slate-200 text-slate-400' 
-                  : 'bg-slate-900 border-slate-800 text-emerald-400 shadow-emerald-500/10'
+                  : 'border-emerald-100 bg-white'
               }`}>
-                {msg.role === 'user' ? <UserCircleIcon className="w-7 h-7" /> : <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="w-8 h-8 rounded-lg object-contain" />}
+                {msg.role === 'user' ? <UserCircleIcon className="h-5 w-5" /> : <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="h-6 w-6 rounded-md object-contain" />}
               </div>
-              <div className={`group relative px-5 py-3 rounded-2xl max-w-[80%] shadow-sm transition-all hover:shadow-md ${
+              <div className={`max-w-[86%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm sm:max-w-[78%] ${
                 msg.role === 'user' 
                   ? 'bg-emerald-600 text-white rounded-tr-none' 
-                  : 'bg-white text-slate-800 rounded-tl-none border border-slate-100'
+                  : 'border border-slate-200 bg-white text-slate-800 rounded-tl-none'
               }`}>
-                <p className="text-sm leading-relaxed font-medium">{msg.text}</p>
-                <span className={`absolute top-full mt-1 text-[9px] font-bold uppercase tracking-tighter opacity-0 group-hover:opacity-40 transition-opacity ${
-                  msg.role === 'user' ? 'right-0' : 'left-0 text-slate-500'
-                }`}>
-                  {msg.role === 'user' ? 'Verified Patient' : 'Medical Intelligence'}
-                </span>
+                <p className="font-medium">{msg.text}</p>
               </div>
             </div>
           ))}
           
           {isLoading && (
             <div className="flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-slate-900 border-slate-800 flex items-center justify-center animate-pulse shadow-lg shadow-emerald-500/10">
-                <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="w-8 h-8 rounded-lg object-contain" />
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-emerald-100 bg-white shadow-sm">
+                <img src="/mobiledoclogo.jpeg" alt="MobileDoc AI" className="h-6 w-6 rounded-md object-contain" />
               </div>
-              <div className="px-5 py-4 bg-white rounded-2xl rounded-tl-none border border-slate-100 shadow-sm flex items-center gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></span>
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                <span className="ml-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Analyzing Symptoms...</span>
+              <div className="flex items-center gap-2 rounded-2xl rounded-tl-none border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-500 shadow-sm">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+                Reviewing your symptoms...
               </div>
             </div>
           )}
         </div>
 
-        <footer className="p-5 border-t border-slate-100 bg-white relative">
+        <footer className="border-t border-slate-200 bg-white p-4 sm:p-5">
           {isFinished ? (
-            <div className="space-y-4">
-              <div className={`p-4 rounded-xl border flex items-center justify-between ${
+            <div className="max-h-[48vh] space-y-4 overflow-y-auto pr-1">
+              <div className={`flex items-center justify-between rounded-xl border p-4 ${
                 triageResult?.triageLevel === 'Emergency' ? 'bg-red-50 border-red-100 text-red-700' :
                 triageResult?.triageLevel === 'Urgent' ? 'bg-amber-50 border-amber-100 text-amber-700' :
                 'bg-emerald-50 border-emerald-100 text-emerald-700'
@@ -174,6 +181,31 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
                 </div>
                 <CheckCircleIcon className="h-8 w-8 opacity-20" />
               </div>
+              {triageResult?.symptomSummary && (
+                <p className="text-sm leading-relaxed text-slate-600">{triageResult.symptomSummary}</p>
+              )}
+              {triageResult?.recommendedAction && (
+                <div className={`rounded-xl p-4 text-sm leading-relaxed ${triageResult?.triageLevel === 'Emergency' ? 'bg-red-50 text-red-800' : 'bg-slate-50 text-slate-700'}`}>
+                  <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-slate-400">Recommended next step</p>
+                  <p className="font-semibold">{triageResult.recommendedAction}</p>
+                </div>
+              )}
+              {triageResult?.referrals?.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Suggested care route</p>
+                  {triageResult.referrals.map((referral: { type: string; reason?: string }, index: number) => {
+                    const available = referral.type === 'Doctor' ? doctors.length : referral.type === 'Hospital' ? hospitals.length : referral.type === 'Laboratory' ? labTests.length : 0;
+                    return (
+                      <div key={`${referral.type}-${index}`} className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-900">
+                        <p className="font-black">{referral.type}</p>
+                        <p className="mt-0.5 leading-relaxed">{referral.reason}</p>
+                        <p className="mt-1 font-semibold text-emerald-700">{available > 0 ? `${available} verified option${available === 1 ? '' : 's'} available in MobileDoc.` : 'Our team will help connect you with an available provider.'}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-center text-[11px] leading-relaxed text-slate-400">This is guidance, not a diagnosis. Seek immediate help for serious or rapidly worsening symptoms.</p>
               <button 
                 onClick={() => onComplete(triageResult)} 
                 className="w-full py-4 bg-slate-900 text-emerald-400 font-black uppercase tracking-widest rounded-xl hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-3 active:scale-[0.98]"
@@ -182,7 +214,7 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex items-end gap-2">
               <div className="flex-1 relative">
                 <input 
                   type="text" 
@@ -190,7 +222,7 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
                   onChange={(e) => setInput(e.target.value)} 
                   onKeyDown={(e) => e.key === 'Enter' && handleSend()} 
                   placeholder="Type symptoms (e.g. Sharp chest pain...)" 
-                  className="w-full p-4 pr-12 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-2 focus:ring-emerald-500 focus:bg-white outline-none transition-all text-sm font-medium" 
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3.5 pr-12 text-sm font-medium outline-none transition-all focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20"
                   disabled={isLoading} 
                 />
                 <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -200,7 +232,8 @@ const TriageBot: React.FC<TriageBotProps> = ({ onClose, onComplete }) => {
               <button 
                 onClick={handleSend} 
                 disabled={isLoading || !input.trim()} 
-                className="p-4 bg-emerald-600 text-white rounded-2xl hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-200 transition-all disabled:opacity-50 disabled:grayscale active:scale-90 shadow-md"
+                aria-label="Send message"
+                className="rounded-2xl bg-emerald-600 p-3.5 text-white shadow-md transition-all hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:grayscale active:scale-90"
               >
                 <SendIcon className="h-6 w-6" />
               </button>

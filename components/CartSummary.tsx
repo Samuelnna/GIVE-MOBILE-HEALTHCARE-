@@ -76,8 +76,8 @@ const CartSummary: React.FC<CartSummaryProps> = ({ isOpen, onClose, cartItems, o
                             <span className="text-lg font-semibold text-slate-700">Subtotal</span>
                             <span className="text-xl font-bold text-slate-800">₦{subtotal.toLocaleString()}</span>
                         </div>
-                        <button onClick={onProceedToCheckout} className="w-full bg-sky-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-sky-700 transition-colors">
-                            Proceed to Checkout
+                        <button onClick={onProceedToCheckout} className="w-full bg-emerald-700 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-800 transition-colors">
+                            Process order
                         </button>
                     </footer>
                 )}

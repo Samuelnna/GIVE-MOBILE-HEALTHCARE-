@@ -328,8 +328,17 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
 
   const updateCartInDB = async (med: Medication, quantity: number) => {
     if (!currentUser) return;
-    if (quantity <= 0) { await supabase.from('cart_items').delete().eq('user_id', currentUser.id).eq('medication_id', med.id); }
-    else { await supabase.from('cart_items').upsert({ user_id: currentUser.id, medication_id: med.id, quantity: quantity, updated_at: new Date().toISOString() }); }
+    const result = quantity <= 0
+      ? await supabase.from('cart_items').delete().eq('user_id', currentUser.id).eq('medication_id', med.id)
+      : await supabase.from('cart_items').upsert(
+          { user_id: currentUser.id, medication_id: med.id, quantity, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id,medication_id' }
+        );
+
+    if (result.error) {
+      console.error('Cart persistence error:', result.error);
+      addNotification('Cart not saved', 'We could not save this item. Please try again.', 'error');
+    }
   };
 
   // Default Configuration (can be moved to a settings table later)
@@ -564,7 +573,29 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
         </div>
       </main>
       <Chatbot />
-      {isAssistantOpen && <AITriageAssistant onClose={() => setIsAssistantOpen(false)} onComplete={() => setActiveSection('Patient Records')} />}
+      {isAssistantOpen && <AITriageAssistant
+        doctors={doctors}
+        hospitals={hospitals}
+        labTests={labTests}
+        onClose={() => setIsAssistantOpen(false)}
+        onComplete={async (result) => {
+          const { error } = await supabase.from('emr_records').insert({
+            patient_id: currentUser.id,
+            record_type: 'Triage',
+            title: `${result.triageLevel} triage assessment`,
+            diagnosis: result.symptomSummary || 'Symptom assessment',
+            treatment_plan: result.recommendedAction || 'Follow the recommended next step.',
+            data: result,
+          });
+          if (error) {
+            addNotification('Save failed', 'The assessment could not be added to your medical records.', 'error');
+            return;
+          }
+          setIsAssistantOpen(false);
+          setActiveSection('Patient Records');
+          addNotification('Saved', 'Your triage assessment is now in Medical Records.', 'success');
+        }}
+      />}
       <CartSummary isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med as any, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med as any, quantity: q }]; }); }} onProceedToCheckout={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} />
       {isCheckoutOpen && <CheckoutModal cartItems={cartItems} onClose={() => setIsCheckoutOpen(false)} onConfirm={handlePlaceOrder} />}
       {isVideoCallActive && videoCallParticipant && (

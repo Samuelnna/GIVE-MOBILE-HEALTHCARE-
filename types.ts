@@ -272,9 +272,9 @@ export interface HealthGoal {
 }
 
 export interface Referral {
-    type: 'Doctor' | 'Hospital' | 'Lab';
-    name: string;
-    id: number;
+  type: 'Doctor' | 'Hospital' | 'Laboratory' | 'Pharmacy';
+  name?: string;
+  id?: number | string;
     reason: string;
 }
 

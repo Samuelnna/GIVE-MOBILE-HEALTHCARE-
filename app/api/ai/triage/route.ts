@@ -65,6 +65,9 @@ export async function POST(request: NextRequest) {
       }))
     : [];
 
-  const result = await runTriageAIAction(userInput, history);
+  const language = ['Auto-detect', 'English', 'Nigerian Pidgin', 'Yoruba', 'Igbo', 'Hausa'].includes(body.language)
+    ? body.language
+    : 'Auto-detect';
+  const result = await runTriageAIAction(userInput, history, language);
   return json(result, result.success ? 200 : 502);
 }

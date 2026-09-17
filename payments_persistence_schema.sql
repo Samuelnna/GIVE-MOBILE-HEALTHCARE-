@@ -19,8 +19,8 @@ CREATE TABLE IF NOT EXISTS public.payments (
 );
 
 -- 0. Ensure profiles table has image_url column
-DO $$ 
-BEGIN 
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='profiles' AND column_name='image_url') THEN
     ALTER TABLE public.profiles ADD COLUMN image_url TEXT;
   END IF;
@@ -36,6 +36,22 @@ CREATE TABLE IF NOT EXISTS public.cart_items (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(user_id, medication_id)
 );
+
+-- Ensure payment links exist before policies reference them.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lab_appointments' AND column_name='payment_status') THEN
+    ALTER TABLE public.lab_appointments ADD COLUMN payment_status TEXT DEFAULT 'unpaid';
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lab_appointments' AND column_name='payment_id') THEN
+    ALTER TABLE public.lab_appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='appointments' AND column_name='payment_id') THEN
+    ALTER TABLE public.appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 -- 3. Enable RLS
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
@@ -68,22 +84,7 @@ FOR UPDATE USING (true);
 
 -- 5. Policies for Cart Items
 DROP POLICY IF EXISTS "Users can manage their own cart items" ON public.cart_items;
-CREATE POLICY "Users can manage their own cart items" ON public.cart_items 
-FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Users can manage their own cart items" ON public.cart_items
+FOR ALL USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
 
--- 6. Add payment_status to lab_appointments if not exists
-DO $$ 
-BEGIN 
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lab_appointments' AND column_name='payment_status') THEN
-    ALTER TABLE public.lab_appointments ADD COLUMN payment_status TEXT DEFAULT 'unpaid';
-  END IF;
-  
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='lab_appointments' AND column_name='payment_id') THEN
-    ALTER TABLE public.lab_appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
-  END IF;
-
-  -- Ensure payment_id exists on main appointments table
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='appointments' AND column_name='payment_id') THEN
-    ALTER TABLE public.appointments ADD COLUMN payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;
-  END IF;
-END $$;
