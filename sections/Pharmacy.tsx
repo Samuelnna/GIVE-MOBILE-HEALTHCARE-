@@ -221,6 +221,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
     const [prescriptionFile, setPrescriptionFile] = useState<File | null>(null);
     const [isUploadingPrescription, setIsUploadingPrescription] = useState(false);
     const [prescriptionSubmitted, setPrescriptionSubmitted] = useState(false);
+    const [prescriptionError, setPrescriptionError] = useState('');
     const prescriptionInputRef = useRef<HTMLInputElement>(null);
   const [realMeds, setRealMeds] = useState<Medication[]>(pharmacyItems || []);
   const [loading, setLoading] = useState(!(pharmacyItems && pharmacyItems.length));
@@ -251,7 +252,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
     }
   };
 
-  useEffect(() => {
+    useEffect(() => {
     // Robust Fetch on Entry: Always fetch fresh data to ensure nothing "sleeps"
     fetchRealMeds();
 
@@ -294,8 +295,16 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
 
     const handlePrescriptionUpload = async () => {
         if (!prescriptionFile || isUploadingPrescription) return;
+        setPrescriptionError('');
+        if (prescriptionFile.size > 10 * 1024 * 1024) {
+            setPrescriptionError('Please choose a file smaller than 10 MB.');
+            return;
+        }
         const userId = await getAuthedUserId();
-        if (!userId) return;
+        if (!userId) {
+            setPrescriptionError('Please sign in before uploading a prescription.');
+            return;
+        }
 
         setIsUploadingPrescription(true);
         const safeName = prescriptionFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
@@ -303,6 +312,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
         const { error: uploadError } = await supabase.storage.from('pharmacy-prescriptions').upload(filePath, prescriptionFile, { upsert: false });
 
         if (uploadError) {
+            setPrescriptionError(uploadError.message || 'The prescription could not be uploaded. Please try again.');
             setIsUploadingPrescription(false);
             return;
         }
@@ -318,6 +328,8 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
             setPrescriptionSubmitted(true);
             setPrescriptionFile(null);
             if (prescriptionInputRef.current) prescriptionInputRef.current.value = '';
+        } else {
+            setPrescriptionError(requestError.message || 'The prescription was uploaded but could not be submitted. Please try again.');
         }
         setIsUploadingPrescription(false);
     };
@@ -343,11 +355,15 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
                             <p className="mt-1 text-sm leading-relaxed text-slate-600">Upload a clear photo or PDF and our pharmacy team will review it before helping you complete your order.</p>
                         </div>
                     </div>
-                    <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <input ref={prescriptionInputRef} type="file" accept="image/*,.pdf" onChange={(event) => setPrescriptionFile(event.target.files?.[0] || null)} className="block w-full rounded-xl border border-emerald-200 bg-white text-sm file:mr-3 file:border-0 file:bg-emerald-100 file:px-4 file:py-3 file:font-bold file:text-emerald-800" />
-                        <button type="button" onClick={handlePrescriptionUpload} disabled={!prescriptionFile || isUploadingPrescription} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"><UploadIcon className="h-4 w-4" />{isUploadingPrescription ? 'Processing...' : 'Process prescription'}</button>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                        <input ref={prescriptionInputRef} id="prescription-file" type="file" accept="image/*,.pdf" onChange={(event) => { setPrescriptionFile(event.target.files?.[0] || null); setPrescriptionSubmitted(false); setPrescriptionError(''); }} className="sr-only" />
+                        <label htmlFor="prescription-file" className="flex min-h-12 min-w-0 cursor-pointer items-center justify-center rounded-xl border border-emerald-200 bg-white px-4 py-3 text-center text-sm font-bold text-emerald-800 transition hover:bg-emerald-50 sm:justify-start">
+                            <span className="truncate">{prescriptionFile ? prescriptionFile.name : 'Choose prescription photo or PDF'}</span>
+                        </label>
+                        <button type="button" onClick={handlePrescriptionUpload} disabled={!prescriptionFile || isUploadingPrescription} className="inline-flex min-h-12 w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-black text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"><UploadIcon className="h-4 w-4" />{isUploadingPrescription ? 'Uploading...' : 'Submit prescription'}</button>
                     </div>
-                    {prescriptionFile && <p className="mt-2 text-xs font-semibold text-emerald-800">Selected: {prescriptionFile.name}</p>}
+                    <p className="mt-2 text-xs text-slate-500">Images or PDF, maximum 10 MB.</p>
+                    {prescriptionError && <p role="alert" className="mt-3 text-sm font-bold text-rose-700">{prescriptionError}</p>}
                     {prescriptionSubmitted && <p className="mt-3 flex items-center gap-2 text-sm font-bold text-emerald-700"><CheckCircleIcon className="h-4 w-4" /> Prescription received. Our pharmacy team will review it.</p>}
                 </div>
                 <div className="rounded-2xl bg-slate-950 p-5 text-white sm:p-6">
@@ -356,27 +372,27 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
                     <p className="mt-2 text-sm leading-relaxed text-slate-300">Search our available catalog, add non-prescription items, then process your order for delivery or pickup.</p>
                 </div>
             </div>
-            <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px_220px]">
-                    <label className="relative block">
+                <div className="mb-8 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,220px)_minmax(0,220px)]">
+                    <label className="relative block min-w-0">
                         <span className="sr-only">Search medication</span>
                         <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                        <input type="search" placeholder="Search by medication name..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }} className="w-full rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" />
+                        <input type="search" placeholder="Search medication..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }} className="block w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" />
                     </label>
           <select 
             value={selectedLocation} 
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="w-full rounded-xl border border-slate-200 bg-white p-3.5 font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+            className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 font-medium outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
           >
               {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
           </select>
-          <select id="sort-meds" value={sortOption} onChange={(e) => setSortOption(e.target.value as SortOption)} className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 transition bg-white">
+          <select id="sort-meds" value={sortOption} onChange={(e) => setSortOption(e.target.value as SortOption)} className="w-full min-w-0 p-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500 transition bg-white">
               <option value="name-asc">Sort by Name (A-Z)</option>
               <option value="name-desc">Sort by Name (Z-A)</option>
               <option value="price-asc">Price: Low to High</option>
               <option value="price-desc">Price: High to Low</option>
           </select>
       </div>
-    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
           {visibleMeds.map(med => (
           <MedicationCard key={med.id} med={med} onSelect={setSelectedMed} cartItem={cartItemsMap.get(med.id)} onUpdateCart={onUpdateCart} />
           ))}

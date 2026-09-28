@@ -97,6 +97,7 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
 
 const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initialPayments = [] }) => {
   const [verifications, setVerifications] = useState<any[]>([]);
+    const [approvedVerifications, setApprovedVerifications] = useState<any[]>([]);
   const [dbPayments, setDbPayments] = useState<any[]>([]);
   const [platformSettings, setPlatformSettings] = useState<any>(null);
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
@@ -395,13 +396,13 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
             role
           )
         `)
-        .eq('status', 'pending');
+                .in('status', ['pending', 'approved']);
         
       if (error) {
         const { data: vData, error: vError } = await supabase
           .from('professional_verifications')
           .select('*')
-          .eq('status', 'pending');
+          .in('status', ['pending', 'approved']);
           
         if (vError) throw vError;
         
@@ -414,9 +415,12 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
           return { ...v, profiles: pData };
         }));
         
-        setVerifications(verificationsWithProfiles);
+                setVerifications(verificationsWithProfiles.filter((v) => v.status === 'pending'));
+                setApprovedVerifications(verificationsWithProfiles.filter((v) => v.status === 'approved'));
       } else {
-        setVerifications(data || []);
+                const rows = data || [];
+                setVerifications(rows.filter((v) => v.status === 'pending'));
+                setApprovedVerifications(rows.filter((v) => v.status === 'approved'));
       }
     } catch (err) {
       addNotification('Admin Fetch Error', (err as Error).message, 'error');
@@ -445,12 +449,18 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
 
   const handleApprove = async (id: string, userId: string) => {
     try {
-      await supabase.from('professional_verifications').update({ status: 'approved' }).eq('id', id);
-      await supabase.from('profiles').update({ status: 'active' }).eq('id', userId);
+            const { error: verificationError } = await supabase
+                .from('professional_verifications')
+                .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+                .eq('id', id);
+            if (verificationError) throw verificationError;
+
+            const { error: profileError } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId);
+            if (profileError) throw profileError;
       addNotification('Success', 'Professional approved', 'success');
       fetchVerifications();
     } catch (e) {
-      console.error(e);
+            addNotification('Approval Error', (e as Error).message, 'error');
     }
   };
 
@@ -848,6 +858,46 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
           </div>
         )}
       </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+                <h3 className="text-xl font-bold mb-4 border-b pb-2 text-slate-800">APPROVED PROFESSIONALS ({approvedVerifications.length})</h3>
+                {approvedVerifications.length === 0 ? (
+                    <p className="text-slate-500">No approved professionals yet.</p>
+                ) : (
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[650px] text-left text-sm">
+                            <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                <tr>
+                                    <th className="p-3">Professional</th>
+                                    <th className="p-3">Role</th>
+                                    <th className="p-3">License</th>
+                                    <th className="p-3">Approved</th>
+                                    <th className="p-3">Contact</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {approvedVerifications.map((v) => (
+                                    <tr key={v.id} className="hover:bg-slate-50/70">
+                                        <td className="p-3 font-bold text-slate-700">{v.profiles?.full_name || 'Unknown professional'}</td>
+                                        <td className="p-3 text-slate-600">{v.profiles?.role || '—'}</td>
+                                        <td className="p-3 text-slate-600">{v.license_number || '—'}</td>
+                                        <td className="p-3 text-slate-600">
+                                            {v.reviewed_at ? new Date(v.reviewed_at).toLocaleString() : 'Date unavailable'}
+                                        </td>
+                                        <td className="p-3">
+                                            {v.profiles?.email ? (
+                                                <a href={`mailto:${v.profiles.email}`} className="font-bold text-sky-700 hover:text-sky-900 hover:underline">
+                                                    {v.profiles.email}
+                                                </a>
+                                            ) : '—'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
 
       <div className="grid grid-cols-1 gap-6">
         {/* Blog Posts Management */}
