@@ -12,6 +12,8 @@ export interface User {
   userType: 'patient' | 'professional' | 'admin';
   status?: string;
   hospitalId?: string;
+  hospitalName?: string;
+  specialty?: string;
   subaccount_id?: string;
   bank_details?: {
     bank_name: string;
@@ -30,6 +32,8 @@ export interface Doctor {
   imageUrl: string;
   yearsOfExperience?: number;
   bio?: string;
+  professionType?: 'Doctor' | 'Nurse' | 'Pharmacist' | 'Lab Scientist' | 'Other';
+  isBookable?: boolean;
   consultationTypes?: ('Video Call' | 'Audio Call' | 'In-Person' | 'Messaging')[];
 }
 

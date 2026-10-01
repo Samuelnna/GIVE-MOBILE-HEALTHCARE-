@@ -93,6 +93,8 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
         imageUrl: profile.image_url,
         status: profile.status,
         hospitalId: profile.hospital_id || profile.hospitalId,
+        hospitalName: profile.hospital_name || undefined,
+        specialty: profile.specialty || profile.role || undefined,
         subaccount_id: profile.subaccount_id,
         bank_details: profile.bank_details,
       };

@@ -44,21 +44,45 @@ export function mapMedication(m: any): Medication {
   } as Medication;
 }
 
+function getProfessionalType(role?: string): Doctor['professionType'] {
+  const text = (role || '').toLowerCase();
+
+  if (/(doctor|physician|surgeon|consultant|general practitioner|gp|cardiologist|neurologist|pediatrician|dentist|specialist)/.test(text)) return 'Doctor';
+  if (/(nurse|midwife|registered nurse|rn)/.test(text)) return 'Nurse';
+  if (/(pharmacist|pharmacy)/.test(text)) return 'Pharmacist';
+  if (/(lab scientist|laboratory|technician|biochemist)/.test(text)) return 'Lab Scientist';
+  return 'Other';
+}
+
+function formatProfessionalName(fullName: string, role?: string) {
+  const cleanName = fullName || 'Specialist';
+  const professionType = getProfessionalType(role);
+  return professionType === 'Doctor' && !cleanName.toLowerCase().startsWith('dr.')
+    ? `Dr. ${cleanName}`
+    : cleanName;
+}
+
 export function mapDoctor(p: any): Doctor {
   const name = p.full_name || 'Specialist';
   const verification = Array.isArray(p.professional_verifications)
     ? p.professional_verifications[0]
     : p.professional_verifications;
 
+  const roleSpecialty = p.specialty || p.role || 'General Practice';
+  const hospitalName = p.hospital_name || p.hospital?.name || 'MobileDoc Network';
+  const professionType = getProfessionalType(roleSpecialty);
+
   return {
     id: p.id,
-    name: name.startsWith('Dr.') ? name : `Dr. ${name}`,
-    specialty: p.role || 'General Practice',
-    hospital: 'MobileDoc Network',
+    name: formatProfessionalName(name, roleSpecialty),
+    specialty: roleSpecialty,
+    hospital: hospitalName,
     availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
     imageUrl: p.image_url || verification?.selfie_url || p.selfie_url || '',
     bio: p.ai_description || 'Verified MobileDoc Healthcare Professional',
-    consultationTypes: ['Video Call', 'Messaging'],
+    professionType,
+    isBookable: professionType === 'Doctor',
+    consultationTypes: professionType === 'Doctor' ? ['Video Call', 'Messaging'] : ['Messaging'],
     subaccount_id: p.subaccount_id,
   } as Doctor;
 }
@@ -120,18 +144,30 @@ export async function loadPublicCatalogs() {
     all(supabase.from('lab_tests').select('*, labs(name, location)'), [] as any[]),
     all(supabase.from('medications').select('*, pharmacies(name, location)'), [] as any[]),
     all(
-      supabase.from('profiles').select('*, professional_verifications(selfie_url)').eq('user_type', 'professional').eq('status', 'active'),
+      supabase
+        .from('profiles')
+        .select('*, professional_verifications(selfie_url)')
+        .eq('user_type', 'professional')
+        .in('status', ['active', 'pending']),
       [] as any[]
     ),
     all(supabase.from('platform_settings').select('*').eq('id', 'commission_rates').maybeSingle(), null as any),
     all(supabase.from('health_topics').select('*').order('published_at', { ascending: false }), [] as any[]),
   ]);
 
+  const hospitalNameMap = new Map((hospitals || []).map((hospital: any) => [String(hospital.id), hospital.name]));
+
+  const doctorProfiles = (doctors || []).map((doctor: any) => {
+    const hospitalId = doctor.hospital_id ?? doctor.hospitalId;
+    const resolvedHospitalName = doctor.hospital_name || doctor.hospital?.name || hospitalNameMap.get(String(hospitalId)) || 'MobileDoc Network';
+    return { ...doctor, hospital_name: resolvedHospitalName };
+  });
+
   return {
     hospitals: (hospitals || []).map(mapHospital),
     labTests: (labTests || []).map(mapLabTest),
     medications: (medications || []).map(mapMedication),
-    doctors: (doctors || []).map(mapDoctor),
+    doctors: doctorProfiles.map(mapDoctor),
     rates: settings?.data || null,
     healthTopics: topics || [],
   };

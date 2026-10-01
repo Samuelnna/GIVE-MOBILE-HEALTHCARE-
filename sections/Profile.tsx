@@ -96,18 +96,60 @@ const NotificationPreferenceRow: React.FC<{ title: string }> = ({ title }) => {
     );
 };
 
+const specialtyOptions = [
+    'Cardiology',
+    'Dermatology',
+    'Endocrinology',
+    'General Practice',
+    'Gastroenterology',
+    'Neurology',
+    'Oncology',
+    'Orthopedics',
+    'Pediatrics',
+    'Psychiatry',
+    'Surgery',
+    'Urology',
+    'Nursing',
+    'Pharmacy',
+    'Laboratory Medicine'
+];
 
 const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [showPayoutModal, setShowPayoutModal] = useState(false);
   const [isSavingPayout, setIsSavingPayout] = useState(false);
-  const [formData, setFormData] = useState({ name: user.name, email: user.email });
+  const [formData, setFormData] = useState({
+    name: user.name,
+    email: user.email,
+    specialty: user.userType === 'professional' ? (user.specialty || (user as any).role || '') : '',
+        hospitalName: user.hospitalName || ''
+  });
   const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(user.imageUrl || null);
   const [isSaving, setIsSaving] = useState(false);
+  const [hospitalOptions, setHospitalOptions] = useState<{ id: string; name: string }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  React.useEffect(() => {
+    if (user.userType !== 'professional') return;
+
+    const fetchHospitals = async () => {
+      const { data } = await supabase.from('hospitals').select('id, name').order('name');
+            if (data) {
+                const options = data.map((hospital: any) => ({ id: String(hospital.id), name: hospital.name }));
+                setHospitalOptions(options);
+                setFormData((prev) => {
+                    if (prev.hospitalName) return prev;
+                    const selectedHospital = options.find((hospital) => hospital.id === user.hospitalId);
+                    return selectedHospital ? { ...prev, hospitalName: selectedHospital.name } : prev;
+                });
+            }
+    };
+
+    fetchHospitals();
+  }, [user.userType]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
@@ -154,13 +196,23 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
 
         // 2. Update profiles table
         console.log('Profile: Updating profiles table...');
+        const profileUpdate: any = {
+            full_name: formData.name,
+            email: formData.email,
+            image_url: finalImageUrl,
+        };
+
+        if (user.userType === 'professional') {
+            const hospitalName = formData.hospitalName.trim();
+            const selectedHospital = hospitalOptions.find((hospital) => hospital.name.toLowerCase() === hospitalName.toLowerCase());
+            profileUpdate.role = formData.specialty.trim() || user.specialty || 'General Practice';
+            profileUpdate.hospital_id = selectedHospital?.id || (hospitalName ? null : user.hospitalId || null);
+            profileUpdate.hospital_name = hospitalName || null;
+        }
+
         const { error: profileError } = await supabase
             .from('profiles')
-            .update({
-                full_name: formData.name,
-                email: formData.email,
-                image_url: finalImageUrl // Use correct snake_case column name
-            } as any)
+            .update(profileUpdate)
             .eq('id', user.id);
         
         if (profileError) throw profileError;
@@ -180,19 +232,27 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
             name: formData.name,
             email: formData.email,
             imageUrl: finalImageUrl,
+            specialty: user.userType === 'professional' ? (formData.specialty.trim() || user.specialty || 'General Practice') : user.specialty,
+            hospitalId: user.userType === 'professional' ? (hospitalOptions.find((hospital) => hospital.name.toLowerCase() === formData.hospitalName.trim().toLowerCase())?.id || (formData.hospitalName.trim() ? undefined : user.hospitalId)) : user.hospitalId,
+            hospitalName: user.userType === 'professional' ? (formData.hospitalName.trim() || undefined) : user.hospitalName,
         };
 
         onUpdateUser(updatedUser);
         setIsEditing(false);
     } catch (e: any) {
-        alert(`Error saving profile: ${e.message}. Make sure 'avatars' bucket is public.`);
+        alert(`Error saving profile: ${e.message}`);
     } finally {
         setIsSaving(false);
     }
   };
 
   const handleCancel = () => {
-    setFormData({ name: user.name, email: user.email });
+    setFormData({
+      name: user.name,
+      email: user.email,
+      specialty: user.specialty || '',
+            hospitalName: user.hospitalName || hospitalOptions.find((hospital) => hospital.id === user.hospitalId)?.name || ''
+    });
     setImagePreview(user.imageUrl || null);
     setProfileImageFile(null);
     setIsEditing(false);
@@ -207,7 +267,6 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
     setIsSavingPayout(true);
     try {
         console.log('Profile: Setting up subaccount...');
-        
         // 1. Create subaccount via Flutterwave Server Action
         // We use a fixed 0.3 split for doctors (meaning 30% goes to main account)
         const flwRes = await createSubaccountAction({
@@ -215,7 +274,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
             account_number: bankDetails.account_number,
             business_name: user.name,
             business_email: user.email,
-            business_mobile: '08000000000', // In production, use user's phone
+            business_mobile: '08000000000',
             split_value: 0.3
         });
 
@@ -281,7 +340,7 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
             </div>
             <div className="flex-grow">
                  {isEditing ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3">
                         <input
                             type="text"
                             name="name"
@@ -296,11 +355,55 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
                             onChange={handleInputChange}
                             className="w-full max-w-xs text-slate-600 border-b-2 border-sky-300 focus:border-sky-500 outline-none bg-transparent"
                         />
+                        {user.userType === 'professional' && (
+                          <div className="grid max-w-xl gap-3 md:grid-cols-2">
+                                                        <input
+                              name="specialty"
+                                                            type="text"
+                              value={formData.specialty}
+                              onChange={handleInputChange}
+                                                            placeholder="Type or select specialty"
+                                                            aria-label="Specialty"
+                                                            list="professional-specialties"
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-500"
+                                                        />
+                                                        <input
+                                                            name="hospitalName"
+                                                            type="text"
+                                                            list="professional-hospitals"
+                                                            value={formData.hospitalName}
+                              onChange={handleInputChange}
+                                                            placeholder="Type or select hospital"
+                                                            aria-label="Hospital"
+                              className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-sky-500"
+                                                        />
+                                                        <datalist id="professional-specialties">
+                                                            {specialtyOptions.map((specialty) => (
+                                                                <option key={specialty} value={specialty} />
+                                                            ))}
+                                                        </datalist>
+                                                        <datalist id="professional-hospitals">
+                                                            {hospitalOptions.map((hospital) => (
+                                                                <option key={hospital.id} value={hospital.name} />
+                                                            ))}
+                                                        </datalist>
+                          </div>
+                        )}
                     </div>
                  ) : (
                     <>
                         <h1 className="text-3xl font-bold text-slate-800">{user.name}</h1>
                         <p className="text-slate-600 mt-1">{user.email}</p>
+                        {user.userType === 'professional' && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            {user.specialty && (
+                              <span className="text-sm font-semibold text-sky-600 bg-sky-100 px-3 py-1 rounded-full">{user.specialty}</span>
+                            )}
+                                                        {(user.hospitalName || user.hospitalId) && (
+                                                            <span className="text-sm font-semibold text-emerald-600 bg-emerald-100 px-3 py-1 rounded-full">{user.hospitalName || hospitalOptions.find((hospital) => hospital.id === user.hospitalId)?.name || 'Affiliated Hospital'}</span>
+                            )}
+                          </div>
+                        )}
                     </>
                  )}
                 <p className="text-sm font-semibold text-sky-600 bg-sky-100 px-3 py-1 rounded-full inline-block mt-2">Hospital ID: {user.hospitalId}</p>
