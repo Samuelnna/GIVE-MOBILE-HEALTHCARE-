@@ -25,11 +25,19 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onSt
   return (
     <div className="bg-white rounded-2xl shadow-md overflow-hidden text-center transform hover:-translate-y-1 transition-all duration-300 flex flex-col border border-slate-100 p-6 sm:p-8">
       <div className="relative w-24 h-24 mx-auto mb-4">
-        <div className="w-full h-full rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border-4 border-white shadow-inner">
+        {doctor.imageUrl ? (
+          <img
+            src={doctor.imageUrl}
+            alt={doctor.name}
+            className="w-full h-full rounded-full object-cover border-4 border-white shadow-inner"
+          />
+        ) : (
+          <div className="w-full h-full rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border-4 border-white shadow-inner">
             <span className="text-2xl font-black text-slate-400 uppercase tracking-tighter">
-                {getInitials(doctor.name.replace('Dr. ', '').replace('Dr ', ''))}
+              {getInitials(doctor.name.replace('Dr. ', '').replace('Dr ', ''))}
             </span>
-        </div>
+          </div>
+        )}
         <div className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 border-2 border-white rounded-full shadow-sm" title="Verified Professional"></div>
       </div>
       <div className="flex flex-col flex-grow">

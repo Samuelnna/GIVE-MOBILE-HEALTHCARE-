@@ -200,6 +200,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     }).subscribe();
 
     const globalChannel = supabase.channel('global_sync')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, refreshAll)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'hospitals' }, refreshAll)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'lab_tests' }, refreshAll)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'medications' }, refreshAll)

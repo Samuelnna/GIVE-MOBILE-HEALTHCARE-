@@ -8,7 +8,56 @@ import { DocumentTextIcon, MinusIcon, PlusIcon, UploadIcon, SparklesIcon, BellIc
 import { getAuthedUserId } from '../src/supabaseClient';
 
 const ITEMS_PER_PAGE = 6;
+const MAX_PRESCRIPTION_BYTES = 5 * 1024 * 1024;
 type SortOption = 'name-asc' | 'name-desc' | 'price-asc' | 'price-desc';
+
+const normalizePrescriptionFile = async (file: File): Promise<File> => {
+  if (!file) return file;
+
+  if (file.type.startsWith('image/') && file.size > MAX_PRESCRIPTION_BYTES) {
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const img = new Image();
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('Image could not be read.'));
+        img.src = objectUrl;
+      });
+
+      const maxDimension = 1600;
+      const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(img.width * scale));
+      canvas.height = Math.max(1, Math.round(img.height * scale));
+
+      const context = canvas.getContext('2d');
+      if (!context) {
+        URL.revokeObjectURL(objectUrl);
+        return file;
+      }
+
+      context.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob(resolve, 'image/jpeg', 0.82);
+      });
+
+      URL.revokeObjectURL(objectUrl);
+
+      if (!blob) {
+        return file;
+      }
+
+      const compressedName = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+      return new File([blob], compressedName, { type: 'image/jpeg', lastModified: Date.now() });
+    } catch (error) {
+      console.warn('Prescription image compression failed, using original file:', error);
+      return file;
+    }
+  }
+
+  return file;
+};
 
 // --- Shop View Components ---
 
@@ -296,10 +345,13 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
     const handlePrescriptionUpload = async () => {
         if (!prescriptionFile || isUploadingPrescription) return;
         setPrescriptionError('');
-        if (prescriptionFile.size > 10 * 1024 * 1024) {
+
+        const fileSizeInMb = (prescriptionFile.size / (1024 * 1024));
+        if (fileSizeInMb > 10) {
             setPrescriptionError('Please choose a file smaller than 10 MB.');
             return;
         }
+
         const userId = await getAuthedUserId();
         if (!userId) {
             setPrescriptionError('Please sign in before uploading a prescription.');
@@ -334,6 +386,38 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
         setIsUploadingPrescription(false);
     };
 
+    const handlePrescriptionFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) {
+            setPrescriptionFile(null);
+            setPrescriptionSubmitted(false);
+            setPrescriptionError('');
+            return;
+        }
+
+        const normalizedFile = await normalizePrescriptionFile(file);
+        console.log('Prescription upload debug:', {
+            originalName: file.name,
+            originalType: file.type,
+            originalSize: file.size,
+            finalName: normalizedFile.name,
+            finalType: normalizedFile.type,
+            finalSize: normalizedFile.size,
+            userAgent: navigator.userAgent,
+        });
+
+        if (normalizedFile.size > 10 * 1024 * 1024) {
+            setPrescriptionError('This file is too large to upload from mobile. Please try a smaller image or PDF under 10 MB.');
+            setPrescriptionFile(null);
+            if (prescriptionInputRef.current) prescriptionInputRef.current.value = '';
+            return;
+        }
+
+        setPrescriptionFile(normalizedFile);
+        setPrescriptionSubmitted(false);
+        setPrescriptionError('');
+    };
+
   const visibleMeds = sortedAndFilteredMeds.slice(0, visibleCount);
   const cartItemsMap = useMemo(() => new Map(cartItems.map(item => [item.id, item])), [cartItems]);
 
@@ -356,7 +440,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
                         </div>
                     </div>
                     <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                        <input ref={prescriptionInputRef} id="prescription-file" type="file" accept="image/*,.pdf" onChange={(event) => { setPrescriptionFile(event.target.files?.[0] || null); setPrescriptionSubmitted(false); setPrescriptionError(''); }} className="sr-only" />
+                        <input ref={prescriptionInputRef} id="prescription-file" type="file" accept="image/*,.pdf" onChange={handlePrescriptionFileChange} className="sr-only" />
                         <label htmlFor="prescription-file" className="flex min-h-12 min-w-0 cursor-pointer items-center justify-center rounded-xl border border-emerald-200 bg-white px-4 py-3 text-center text-sm font-bold text-emerald-800 transition hover:bg-emerald-50 sm:justify-start">
                             <span className="truncate">{prescriptionFile ? prescriptionFile.name : 'Choose prescription photo or PDF'}</span>
                         </label>

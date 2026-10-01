@@ -46,13 +46,17 @@ export function mapMedication(m: any): Medication {
 
 export function mapDoctor(p: any): Doctor {
   const name = p.full_name || 'Specialist';
+  const verification = Array.isArray(p.professional_verifications)
+    ? p.professional_verifications[0]
+    : p.professional_verifications;
+
   return {
     id: p.id,
     name: name.startsWith('Dr.') ? name : `Dr. ${name}`,
     specialty: p.role || 'General Practice',
     hospital: 'MobileDoc Network',
     availability: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-    imageUrl: '',
+    imageUrl: p.image_url || verification?.selfie_url || p.selfie_url || '',
     bio: p.ai_description || 'Verified MobileDoc Healthcare Professional',
     consultationTypes: ['Video Call', 'Messaging'],
     subaccount_id: p.subaccount_id,
