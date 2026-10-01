@@ -9,10 +9,10 @@ const ITEMS_PER_PAGE = 8;
 interface DoctorCardProps {
   doctor: Doctor;
   onBookAppointment: () => void;
-  onStartVideoCall: () => void;
+  onMessage: () => void;
 }
 
-const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onStartVideoCall }) => {
+const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onMessage }) => {
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -56,7 +56,7 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onSt
         {doctor.isBookable ? (
           <button onClick={onBookAppointment} className="w-full mt-2 py-3 bg-sky-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-100 active:scale-95">Book Appointment</button>
         ) : (
-          <button onClick={() => onStartVideoCall()} className="w-full mt-2 py-3 bg-slate-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">Message</button>
+          <button onClick={onMessage} className="w-full mt-2 py-3 bg-slate-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">Message</button>
         )}
       </div>
     </div>
@@ -65,7 +65,7 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onSt
 
 interface DoctorsProps {
   doctors: Doctor[];
-  onStartVideoCall: (participant: { name: string; imageUrl: string }) => void;
+  onMessageProfessional: (professional: Doctor) => void;
   onBookAppointment: (details: {
     doctor: Doctor;
     date: string;
@@ -75,7 +75,7 @@ interface DoctorsProps {
   }) => void;
 }
 
-const Doctors: React.FC<DoctorsProps> = ({ doctors, onStartVideoCall, onBookAppointment }) => {
+const Doctors: React.FC<DoctorsProps> = ({ doctors, onMessageProfessional, onBookAppointment }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [selectedProfessionalType, setSelectedProfessionalType] = useState<'All Professionals' | 'Doctors' | 'Nurses' | 'Pharmacists' | 'Lab Scientists'>('All Professionals');
@@ -159,7 +159,7 @@ const Doctors: React.FC<DoctorsProps> = ({ doctors, onStartVideoCall, onBookAppo
               key={doctor.id} 
               doctor={doctor} 
               onBookAppointment={() => setBookingDoctor(doctor)}
-              onStartVideoCall={() => onStartVideoCall({name: doctor.name, imageUrl: doctor.imageUrl})}
+              onMessage={() => onMessageProfessional(doctor)}
             />
           ))}
         </div>

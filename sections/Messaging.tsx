@@ -10,7 +10,18 @@ interface Convo {
     messages: any[];
 }
 
-const Messaging: React.FC<{ onStartVideoCall: (p: any) => void, setActiveSection: (s: any) => void }> = ({ onStartVideoCall, setActiveSection }) => {
+interface MessageRecipient {
+    id: string;
+    name: string;
+    imageUrl: string;
+}
+
+const Messaging: React.FC<{
+    onStartVideoCall: (p: any) => void;
+    setActiveSection: (s: any) => void;
+    initialRecipient?: MessageRecipient | null;
+    onInitialRecipientHandled?: () => void;
+}> = ({ onStartVideoCall, setActiveSection, initialRecipient, onInitialRecipientHandled }) => {
   const getInitials = (name: string) => {
     return name
       .split(' ')
@@ -40,7 +51,7 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void, setActiveSection
 
   const fetchConversations = async () => {
     const userId = await getAuthedUserId();
-    if (!userId) return;
+        if (!userId) return [] as Convo[];
 
     const { data } = await supabase
         .from('messages')
@@ -74,7 +85,9 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void, setActiveSection
             const updated = list.find(c => c.id === selectedConvo.id);
             if (updated) setMessages(updated.messages);
         }
+        return list;
     }
+    return [] as Convo[];
   };
 
   useEffect(() => {
@@ -102,7 +115,35 @@ const Messaging: React.FC<{ onStartVideoCall: (p: any) => void, setActiveSection
     };
   }, []);
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedConvo]);
+    useEffect(() => {
+        if (!initialRecipient) return;
+        let cancelled = false;
+
+        const openRecipientConversation = async () => {
+            const loadedConversations = await fetchConversations();
+            if (cancelled) return;
+
+            const existing = loadedConversations.find(conversation => conversation.id === initialRecipient.id);
+            const conversation = existing || {
+                id: initialRecipient.id,
+                participant: { name: initialRecipient.name, imageUrl: initialRecipient.imageUrl },
+                messages: []
+            };
+
+            if (!existing) {
+                setConversations(current => [conversation, ...current.filter(item => item.id !== conversation.id)]);
+            }
+            setSelectedConvo(conversation);
+            setMessages(conversation.messages);
+            setIsGated(false);
+            onInitialRecipientHandled?.();
+        };
+
+        openRecipientConversation();
+        return () => { cancelled = true; };
+    }, [initialRecipient?.id]);
+
+    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedConvo]);
   
   const startNewConversation = async (profile: any) => {
       const userId = await getAuthedUserId();

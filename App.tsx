@@ -56,6 +56,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [videoCallParticipant, setVideoCallParticipant] = useState<VideoCallTarget | null>(null);
+  const [messageRecipient, setMessageRecipient] = useState<{ id: string; name: string; imageUrl: string } | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [initialHospitalSelection, setInitialHospitalSelection] = useState<{hospitalId: string, referralId?: string} | null>(null);
   const [hospitalAppointments, setHospitalAppointments] = useState<any[]>([]);
@@ -540,13 +541,16 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                   addNotification('Success', 'Consultation booked and paid successfully', 'success');
               }
           }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined);
-      }} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} />;
+        }} onMessageProfessional={(professional) => {
+          setMessageRecipient({ id: String(professional.id), name: professional.name, imageUrl: professional.imageUrl });
+          setActiveSection('Messaging');
+        }} />;
       case 'Labs': return <Labs key={`${viewKey}-labs`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} />;
       case 'Pharmacy': return <Pharmacy key={`${viewKey}-pharmacy`} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med, quantity: q }]; }); }} onProceedToCheckout={() => setIsCheckoutOpen(true)} myMedications={myMedications} onSetReminder={() => {}} pharmacyItems={pharmacyItems || []} />;
       case 'Appointments': return <Appointments key={`${viewKey}-appts`} user={currentUser!} appointments={appointments} hospitalAppointments={hospitalAppointments} labAppointments={labAppointments} doctors={doctors || []} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} onBookAppointment={() => {}} />;
       case 'Profile': return <Profile key={`${viewKey}-profile`} user={currentUser!} onUpdateUser={syncUserWithStorage} />;
       case 'Patient Records': return <PatientRecords key={`${viewKey}-records`} user={currentUser!} reports={triageReports} cards={[]} orders={pharmacyOrders} paymentHistory={paymentHistory} doctors={doctors} hospitals={hospitals} labTests={labTests} hospitalServiceCards={[]} medicationRecords={[]} purchasedMedications={[]} setActiveSection={setActiveSection} onScheduleFromReferral={() => {}} onPurchasePrescription={() => {}} />;
-      case 'Messaging': return <Messaging key={`${viewKey}-msgs`} setActiveSection={setActiveSection} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} />;
+      case 'Messaging': return <Messaging key={`${viewKey}-msgs`} initialRecipient={messageRecipient} onInitialRecipientHandled={() => setMessageRecipient(null)} setActiveSection={setActiveSection} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} />;
       case 'Health Summary': return <HealthSummary key={`${viewKey}-summary`} appointments={appointments} />;
       default: return <Dashboard key={`${viewKey}-dash`} user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
     }

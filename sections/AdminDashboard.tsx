@@ -466,12 +466,22 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
 
   const handleReject = async (id: string, userId: string) => {
     try {
-      await supabase.from('professional_verifications').update({ status: 'rejected' }).eq('id', id);
-      await supabase.from('profiles').update({ status: 'rejected' }).eq('id', userId);
-      addNotification('Success', 'Professional rejected', 'success');
+            const { error: verificationError } = await supabase
+                .from('professional_verifications')
+                .update({ status: 'rejected' })
+                .eq('id', id);
+            if (verificationError) throw verificationError;
+
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ status: 'rejected' })
+                .eq('id', userId);
+            if (profileError) throw profileError;
+
+            addNotification('Success', 'Professional removed from the directory', 'success');
       fetchVerifications();
-    } catch (e) {
-      console.error(e);
+        } catch (e) {
+            addNotification('Removal Error', (e as Error).message, 'error');
     }
   };
 
@@ -873,6 +883,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                     <th className="p-3">License</th>
                                     <th className="p-3">Approved</th>
                                     <th className="p-3">Contact</th>
+                                    <th className="p-3">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -890,6 +901,18 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                                     {v.profiles.email}
                                                 </a>
                                             ) : '—'}
+                                        </td>
+                                        <td className="p-3">
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm(`Remove ${v.profiles?.full_name || 'this professional'} from the directory? Their account and history will be preserved.`)) {
+                                                        handleReject(v.id, v.user_id);
+                                                    }
+                                                }}
+                                                className="rounded-md bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100"
+                                            >
+                                                Remove
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
