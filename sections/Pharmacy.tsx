@@ -83,8 +83,15 @@ const MedicationCard: React.FC<{
     return (
       <div 
         onClick={() => onSelect(med)}
-        className="bg-white rounded-lg shadow-md flex flex-col justify-between transform hover:-translate-y-1 transition-all duration-300 cursor-pointer group border border-slate-50"
+                className="overflow-hidden bg-white rounded-lg shadow-md flex flex-col justify-between transform hover:-translate-y-1 transition-all duration-300 cursor-pointer group border border-slate-50"
       >
+                <div className="flex aspect-[4/3] items-center justify-center overflow-hidden bg-slate-50">
+                    {med.imageUrl ? (
+                        <img src={med.imageUrl} alt={med.name} className="h-full w-full object-contain p-4" loading="lazy" />
+                    ) : (
+                        <DocumentTextIcon className="h-12 w-12 text-slate-300" />
+                    )}
+                </div>
         <div className="p-6">
           <h3 className="text-xl font-bold text-slate-800 mb-1 group-hover:text-sky-600 transition-colors">{med.name}</h3>
           <p className="text-slate-500 text-sm mb-2">{med.dosage}</p>
@@ -285,6 +292,7 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
         setRealMeds(data.map(m => ({
           id: m.id,
           name: m.name,
+          imageUrl: m.image_url || m.imageUrl || undefined,
           dosage: m.description || 'As directed',
           price: m.price,
           requiresPrescription: !!m.requires_prescription,
@@ -460,7 +468,18 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
                     <label className="relative block min-w-0">
                         <span className="sr-only">Search medication</span>
                         <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
-                        <input type="search" placeholder="Search medication..." value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(ITEMS_PER_PAGE); }} className="block w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10" />
+                        <input
+                          type="search"
+                          inputMode="search"
+                          autoComplete="off"
+                          placeholder="Search medication..."
+                          value={searchTerm}
+                          onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setVisibleCount(ITEMS_PER_PAGE);
+                          }}
+                          className="block w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
+                        />
                     </label>
           <select 
             value={selectedLocation} 

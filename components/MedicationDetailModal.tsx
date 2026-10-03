@@ -45,6 +45,11 @@ const MedicationDetailModal: React.FC<MedicationDetailModalProps> = ({ medicatio
         </header>
         
         <main className="p-6 overflow-y-auto space-y-6">
+          {medication.imageUrl && (
+            <div className="flex h-56 items-center justify-center overflow-hidden rounded-lg bg-slate-50">
+              <img src={medication.imageUrl} alt={medication.name} className="h-full w-full object-contain p-4" />
+            </div>
+          )}
           <section>
             <h3 className="text-lg font-semibold text-slate-700 mb-3 flex items-center gap-2">
               <InformationCircleIcon className="h-6 w-6 text-sky-500" />

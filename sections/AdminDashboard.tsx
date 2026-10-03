@@ -7,14 +7,19 @@ import { createSubaccountAction, verifyTransactionAction } from '../app/actions/
 
 interface EntityModalProps {
   title: string;
-  fields: { name: string; label: string; type?: string; options?: { value: any; label: string }[] }[];
+    fields: { name: string; label: string; type?: string; options?: { value: any; label: string }[]; required?: boolean; accept?: string }[];
   onClose: () => void;
   onSave: (values: any) => void;
   isUploading?: boolean;
+  initialValues?: Record<string, any>;
 }
 
-const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSave, isUploading = false }) => {
-  const [values, setValues] = useState<any>({});
+const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSave, isUploading = false, initialValues = {} }) => {
+  const [values, setValues] = useState<any>(initialValues);
+
+  useEffect(() => {
+    setValues(initialValues);
+  }, [initialValues]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +49,7 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
               {f.type === 'select' ? (
                   <select
                     required
+                    value={values[f.name] ?? ''}
                     className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500"
                     onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
                   >
@@ -53,14 +59,15 @@ const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSav
               ) : f.type === 'file' ? (
                 <input
                     type="file"
-                    accept="image/*"
-                    required
+                    accept={f.accept || 'image/*'}
+                    required={f.required ?? true}
                     className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-sky-50 file:text-sky-700"
                 />
               ) : (
                 <input
                     type={f.type || 'text'}
-                    required
+                    required={f.required ?? true}
+                    value={values[f.name] ?? ''}
                     className="w-full p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500"
                     onChange={(e) => setValues({ ...values, [f.name]: e.target.value })}
                 />
@@ -128,6 +135,8 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   
   const [selectedPharmacyId, setSelectedPharmacyId] = useState<string | null>(null);
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
+  const [showMedicationEditModal, setShowMedicationEditModal] = useState(false);
+  const [editingMedication, setEditingMedication] = useState<any | null>(null);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showManualResultModal, setShowManualResultModal] = useState(false);
   const [selectedApptForResult, setSelectedApptForResult] = useState<any | null>(null);
@@ -444,6 +453,126 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
     else {
         addNotification('Success', 'Subaccount detached', 'success');
         refreshFn();
+    }
+  };
+
+  const handleDeletePharmacy = async (pharmacyId: string) => {
+    if (!window.confirm('Delete this pharmacy and all of its stocked drugs? This will also remove linked drug records.')) return;
+
+    try {
+      const { data: relatedMeds, error: medsFetchError } = await supabase
+        .from('medications')
+        .select('id')
+        .eq('pharmacy_id', pharmacyId);
+
+      if (medsFetchError) throw medsFetchError;
+
+      const medicationIds = (relatedMeds || []).map((med: any) => med.id);
+
+      if (medicationIds.length) {
+        const { error: orderItemsError } = await supabase
+          .from('pharmacy_order_items')
+          .delete()
+          .in('medication_id', medicationIds);
+        if (orderItemsError) throw orderItemsError;
+
+        const { error: cartItemsError } = await supabase
+          .from('cart_items')
+          .delete()
+          .in('medication_id', medicationIds);
+        if (cartItemsError) throw cartItemsError;
+
+        const { error: prescriptionsError } = await supabase
+          .from('prescriptions')
+          .delete()
+          .in('medication_id', medicationIds);
+        if (prescriptionsError) throw prescriptionsError;
+      }
+
+      const { error: medsDeleteError } = await supabase
+        .from('medications')
+        .delete()
+        .eq('pharmacy_id', pharmacyId);
+      if (medsDeleteError) throw medsDeleteError;
+
+      const { error } = await supabase.from('pharmacies').delete().eq('id', pharmacyId);
+      if (error) throw error;
+
+      addNotification('Success', 'Pharmacy deleted successfully', 'success');
+      fetchPharmacies();
+      fetchMedications();
+    } catch (err: any) {
+      addNotification('Pharmacy Delete Error', err.message || 'The pharmacy could not be deleted.', 'error');
+    }
+  };
+
+  const getMedicationStoragePath = (url?: string | null) => {
+    if (!url) return null;
+    const marker = '/storage/v1/object/public/medication-images/';
+    const idx = url.indexOf(marker);
+    if (idx === -1) return null;
+    return decodeURIComponent(url.slice(idx + marker.length));
+  };
+
+  const handleSaveMedication = async (values: any) => {
+    if (!editingMedication) return;
+
+    try {
+      let imageUrl = editingMedication.image_url || null;
+      const imageFile = values.imageFile as File | undefined;
+
+      if (imageFile) {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(imageFile.type)) {
+          addNotification('Invalid Image', 'Choose a JPEG, PNG, or WebP image.', 'error');
+          return;
+        }
+
+        if (imageFile.size > 5 * 1024 * 1024) {
+          addNotification('Image Too Large', 'Choose an image smaller than 5 MB.', 'error');
+          return;
+        }
+
+        const extension = imageFile.type === 'image/jpeg' ? 'jpg' : imageFile.type.split('/')[1];
+        const pharmacyFolder = editingMedication.pharmacy_id || selectedPharmacyId || 'medications';
+        const uploadedPath = `${pharmacyFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('medication-images')
+          .upload(uploadedPath, imageFile, {
+            cacheControl: '3600',
+            upsert: false,
+            contentType: imageFile.type,
+          });
+
+        if (uploadError) throw uploadError;
+
+        imageUrl = supabase.storage.from('medication-images').getPublicUrl(uploadedPath).data.publicUrl;
+
+        const oldImagePath = getMedicationStoragePath(editingMedication.image_url);
+        if (oldImagePath && oldImagePath !== uploadedPath) {
+          await supabase.storage.from('medication-images').remove([oldImagePath]);
+        }
+      }
+
+      const { error } = await supabase
+        .from('medications')
+        .update({
+          name: values.name,
+          description: values.description || null,
+          price: Number(values.price),
+          stock_quantity: Number(values.stock_quantity) || 0,
+          image_url: imageUrl,
+        })
+        .eq('id', editingMedication.id);
+
+      if (error) throw error;
+
+      addNotification('Success', 'Drug updated successfully', 'success');
+      setShowMedicationEditModal(false);
+      setEditingMedication(null);
+      fetchMedications();
+    } catch (err: any) {
+      addNotification('Drug Update Error', err.message || 'The drug could not be updated.', 'error');
     }
   };
 
@@ -1262,7 +1391,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={() => { setSelectedPharmacyId(p.id); setShowMedicationModal(true); }} className="text-[10px] bg-teal-100 text-teal-700 px-2 py-1 rounded font-black uppercase hover:bg-teal-200">+ Med</button>
-                        <button onClick={() => handleDelete('pharmacies', p.id, fetchPharmacies)} className="text-red-500 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded">
+                        <button onClick={() => handleDeletePharmacy(p.id)} className="text-red-500 opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 rounded">
                             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                     </div>
@@ -1339,7 +1468,10 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                 <td className="py-2 font-bold text-slate-700">{m.name}<p className="text-[10px] font-normal text-emerald-600">₦{m.price.toLocaleString()}</p></td>
                                 <td className="py-2 text-slate-500 text-xs">{m.pharmacies?.name || 'N/A'}</td>
                                 <td className="py-2 text-right">
-                                    <button onClick={() => handleDelete('medications', m.id, fetchMedications)} className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity">Delete</button>
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={() => { setEditingMedication(m); setShowMedicationEditModal(true); }} className="text-teal-600 hover:text-teal-800 text-xs font-bold">Edit</button>
+                                        <button onClick={() => handleDelete('medications', m.id, fetchMedications)} className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-opacity">Delete</button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}
@@ -1409,10 +1541,136 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
 
 
       {showMedicationModal && (
-        <EntityModal title="Add Medication" onClose={() => setShowMedicationModal(false)} fields={[{ name: 'name', label: 'Drug Name' }, { name: 'description', label: 'Description' }, { name: 'price', label: 'Price (₦)', type: 'number' }, { name: 'stock_quantity', label: 'Stock', type: 'number' }]} onSave={async (val) => {
-            const { error } = await supabase.from('medications').insert([{ ...val, pharmacy_id: selectedPharmacyId, price: parseFloat(val.price), stock_quantity: parseInt(val.stock_quantity) || 0 }]);
-            if (!error) { addNotification('Success', 'Medication added', 'success'); fetchMedications(); setShowMedicationModal(false); }
-        }}/>
+                <EntityModal
+                    title="Add Medication"
+                    onClose={() => setShowMedicationModal(false)}
+                    isUploading={isUploading}
+                    fields={[
+                        { name: 'name', label: 'Drug Name' },
+                        { name: 'description', label: 'Description' },
+                        { name: 'price', label: 'Price (₦)', type: 'number' },
+                        { name: 'stock_quantity', label: 'Stock', type: 'number' },
+                        { name: 'image', label: 'Drug Image (optional)', type: 'file', required: false, accept: 'image/jpeg,image/png,image/webp' },
+                    ]}
+                    onSave={async (val) => {
+                        const imageFile = val.imageFile as File | undefined;
+                        if (imageFile && !['image/jpeg', 'image/png', 'image/webp'].includes(imageFile.type)) {
+                            addNotification('Invalid Image', 'Choose a JPEG, PNG, or WebP image.', 'error');
+                            return;
+                        }
+                        if (imageFile && imageFile.size > 5 * 1024 * 1024) {
+                            addNotification('Image Too Large', 'Choose an image smaller than 5 MB.', 'error');
+                            return;
+                        }
+
+                        setIsUploading(true);
+                        let uploadedPath: string | null = null;
+                        try {
+                            let imageUrl: string | null = null;
+                            if (imageFile) {
+                                const extension = imageFile.type === 'image/jpeg' ? 'jpg' : imageFile.type.split('/')[1];
+                                uploadedPath = `${selectedPharmacyId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+                                const { error: uploadError } = await supabase.storage
+                                    .from('medication-images')
+                                    .upload(uploadedPath, imageFile, { cacheControl: '3600', upsert: false, contentType: imageFile.type });
+                                if (uploadError) throw uploadError;
+                                imageUrl = supabase.storage.from('medication-images').getPublicUrl(uploadedPath).data.publicUrl;
+                            }
+
+                            const { error } = await supabase.from('medications').insert([{
+                                name: val.name,
+                                description: val.description || null,
+                                price: parseFloat(val.price),
+                                stock_quantity: parseInt(val.stock_quantity, 10) || 0,
+                                pharmacy_id: selectedPharmacyId,
+                                image_url: imageUrl,
+                            }]);
+                            if (error) throw error;
+
+                            addNotification('Success', 'Medication added', 'success');
+                            fetchMedications();
+                            setShowMedicationModal(false);
+                        } catch (error: any) {
+                            if (uploadedPath) await supabase.storage.from('medication-images').remove([uploadedPath]);
+                            addNotification('Medication Error', error.message || 'The medication could not be added.', 'error');
+                        } finally {
+                            setIsUploading(false);
+                        }
+                    }}
+                />
+      )}
+
+      {showMedicationEditModal && editingMedication && (
+        <EntityModal
+          title="Edit Drug"
+          onClose={() => { setShowMedicationEditModal(false); setEditingMedication(null); }}
+          isUploading={isUploading}
+          initialValues={{
+            name: editingMedication.name,
+            description: editingMedication.description || '',
+            price: String(editingMedication.price ?? 0),
+            stock_quantity: String(editingMedication.stock_quantity ?? 0),
+          }}
+          fields={[
+            { name: 'name', label: 'Drug Name' },
+            { name: 'description', label: 'Description' },
+            { name: 'price', label: 'Price (₦)', type: 'number' },
+            { name: 'stock_quantity', label: 'Stock', type: 'number' },
+            { name: 'image', label: 'Replace Drug Image (optional)', type: 'file', required: false, accept: 'image/jpeg,image/png,image/webp' },
+          ]}
+          onSave={async (val) => {
+            const payload = {
+              name: val.name,
+              description: val.description || null,
+              price: Number(val.price),
+              stock_quantity: Number(val.stock_quantity) || 0,
+            };
+
+            if (!payload.name || Number.isNaN(payload.price)) {
+              addNotification('Invalid Drug Data', 'Please provide a valid name and price.', 'warning');
+              return;
+            }
+
+            try {
+              if (val.imageFile) {
+                const imageFile = val.imageFile as File;
+                if (!['image/jpeg', 'image/png', 'image/webp'].includes(imageFile.type)) {
+                  addNotification('Invalid Image', 'Choose a JPEG, PNG, or WebP image.', 'error');
+                  return;
+                }
+                if (imageFile.size > 5 * 1024 * 1024) {
+                  addNotification('Image Too Large', 'Choose an image smaller than 5 MB.', 'error');
+                  return;
+                }
+
+                const extension = imageFile.type === 'image/jpeg' ? 'jpg' : imageFile.type.split('/')[1];
+                const pharmacyFolder = editingMedication.pharmacy_id || selectedPharmacyId || 'medications';
+                const uploadedPath = `${pharmacyFolder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${extension}`;
+                const { error: uploadError } = await supabase.storage
+                  .from('medication-images')
+                  .upload(uploadedPath, imageFile, { cacheControl: '3600', upsert: false, contentType: imageFile.type });
+
+                if (uploadError) throw uploadError;
+
+                payload['image_url'] = supabase.storage.from('medication-images').getPublicUrl(uploadedPath).data.publicUrl;
+
+                const oldImagePath = getMedicationStoragePath(editingMedication.image_url);
+                if (oldImagePath && oldImagePath !== uploadedPath) {
+                  await supabase.storage.from('medication-images').remove([oldImagePath]);
+                }
+              }
+
+              const { error } = await supabase.from('medications').update(payload).eq('id', editingMedication.id);
+              if (error) throw error;
+              addNotification('Success', 'Drug updated successfully', 'success');
+              setShowMedicationEditModal(false);
+              setEditingMedication(null);
+              fetchMedications();
+            } catch (error: any) {
+              addNotification('Drug Update Error', error.message || 'The drug could not be updated.', 'error');
+            }
+          }}
+        />
       )}
       {showLabTestModal && (
         <EntityModal title="Add Lab Test" onClose={() => setShowLabTestModal(false)} fields={[{ name: 'name', label: 'Test Name' }, { name: 'description', label: 'Description' }, { name: 'price', label: 'Price (₦)', type: 'number' }, { name: 'category', label: 'Category' }, { name: 'requires_fasting', label: 'Requires Fasting?', type: 'select', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] }]} onSave={async (val) => {

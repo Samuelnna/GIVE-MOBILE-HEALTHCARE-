@@ -32,6 +32,7 @@ export function mapMedication(m: any): Medication {
   return {
     id: m.id,
     name: m.name,
+    imageUrl: m.image_url || m.imageUrl || undefined,
     dosage: m.description || m.dosage || 'As directed',
     price: Number(m.price),
     requiresPrescription: !!m.requires_prescription,

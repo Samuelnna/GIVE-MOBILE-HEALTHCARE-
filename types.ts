@@ -133,6 +133,7 @@ export interface Reminder {
 export interface Medication {
   id: number;
   name: string;
+  imageUrl?: string;
   dosage: string;
   price: number;
   requiresPrescription: boolean;

@@ -91,6 +91,7 @@ CREATE TABLE IF NOT EXISTS public.medications (
   price DECIMAL(10, 2) NOT NULL,
   pharmacy_id UUID REFERENCES public.pharmacies(id) ON DELETE CASCADE,
   stock_quantity INTEGER DEFAULT 0,
+  image_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Footer from '../components/Footer';
+import Chatbot from '../components/Chatbot';
 
 interface HomepageProps {
   onGetStarted: () => void;
@@ -113,6 +114,7 @@ export default function Homepage({ onGetStarted }: HomepageProps) {
         </section>
       </main>
       <Footer />
+      <Chatbot onGetStarted={onGetStarted} />
     </div>
   );
 }
