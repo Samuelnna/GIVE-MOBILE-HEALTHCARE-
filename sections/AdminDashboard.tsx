@@ -15,11 +15,7 @@ interface EntityModalProps {
 }
 
 const EntityModal: React.FC<EntityModalProps> = ({ title, fields, onClose, onSave, isUploading = false, initialValues = {} }) => {
-  const [values, setValues] = useState<any>(initialValues);
-
-  useEffect(() => {
-    setValues(initialValues);
-  }, [initialValues]);
+    const [values, setValues] = useState<any>(() => initialValues);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
