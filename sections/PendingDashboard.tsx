@@ -67,6 +67,13 @@ const PendingDashboard: React.FC<PendingDashboardProps> = ({ user, onLogout, onE
             <p className="text-slate-600 text-sm mt-1">when verification is complete.</p>
           </div>
 
+          {user.hospitalName && (
+            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100 text-center">
+              <p className="text-emerald-700 text-sm mb-1">Hospital or clinic</p>
+              <p className="font-bold text-emerald-900">{user.hospitalName}</p>
+            </div>
+          )}
+
           <div className="text-center text-sm text-slate-500">
             Meanwhile, you can edit your profile or log out.
           </div>

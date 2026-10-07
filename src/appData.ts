@@ -221,7 +221,83 @@ export async function loadUserData(userId: string, userType?: string) {
 }
 
 export async function loadProfessionalPractice(doctorId: string) {
-  const [appts, prescriptions, referrals, settings, payments, hospitals, labs] = await Promise.all([
+  const referralsPromise = (async () => {
+    const result = await supabase
+      .from('referrals')
+      .select('*')
+      .or(`doctor_id.eq.${doctorId},referred_doctor_id.eq.${doctorId}`)
+      .order('created_at', { ascending: false });
+
+    let rows = result.data || [];
+    if (result.error) {
+      const legacyResult = await supabase
+        .from('referrals')
+        .select('*')
+        .eq('doctor_id', doctorId)
+        .order('created_at', { ascending: false });
+
+      if (legacyResult.error) {
+        console.error(
+          'Professional referrals could not be loaded:',
+          JSON.stringify({
+            primary: {
+              code: result.error.code,
+              message: result.error.message,
+              details: result.error.details,
+              hint: result.error.hint,
+            },
+            fallback: {
+              code: legacyResult.error.code,
+              message: legacyResult.error.message,
+              details: legacyResult.error.details,
+              hint: legacyResult.error.hint,
+            },
+          })
+        );
+        return [];
+      }
+
+      console.warn(
+        'Loaded issued referrals using the legacy query; received doctor referrals may require the add_doctor_to_doctor_referrals.sql migration.',
+        result.error.message
+      );
+      rows = legacyResult.data || [];
+    }
+
+    const profileIds = [...new Set(rows.flatMap((row: any) =>
+      [row.patient_id, row.doctor_id, row.referred_doctor_id].filter(Boolean)
+    ))];
+
+    if (profileIds.length === 0) return rows;
+
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, specialty')
+      .in('id', profileIds);
+
+    if (profilesError) {
+      console.error(
+        'Referral profile names could not be loaded:',
+        JSON.stringify({
+          code: profilesError.code,
+          message: profilesError.message,
+          details: profilesError.details,
+          hint: profilesError.hint,
+        })
+      );
+      return rows;
+    }
+
+    const profilesById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    return rows.map((row: any) => ({
+      ...row,
+      patient: profilesById.get(row.patient_id) || null,
+      doctor: profilesById.get(row.doctor_id) || null,
+      referred_doctor: profilesById.get(row.referred_doctor_id) || null,
+    }));
+  })();
+
+  const [appts, prescriptions, referrals, settings, payments, referralProfiles] = await Promise.all([
     all(
       supabase
         .from('appointments')
@@ -238,14 +314,7 @@ export async function loadProfessionalPractice(doctorId: string) {
         .order('created_at', { ascending: false }),
       [] as any[]
     ),
-    all(
-      supabase
-        .from('referrals')
-        .select('*, patient:profiles!referrals_patient_id_fkey(full_name), hospital:hospitals(name), lab:labs(name)')
-        .eq('doctor_id', doctorId)
-        .order('created_at', { ascending: false }),
-      [] as any[]
-    ),
+    referralsPromise,
     all(supabase.from('platform_settings').select('*').eq('id', 'commission_rates').maybeSingle(), null as any),
     all(
       supabase
@@ -255,8 +324,15 @@ export async function loadProfessionalPractice(doctorId: string) {
         .in('status', ['successful', 'completed']),
       [] as any[]
     ),
-    all(supabase.from('hospitals').select('*'), [] as any[]),
-    all(supabase.from('labs').select('*'), [] as any[]),
+    all(
+      supabase
+        .from('profiles')
+        .select('id, full_name, role, specialty, professional_verifications(selfie_url), image_url')
+        .eq('user_type', 'professional')
+        .eq('status', 'active')
+        .neq('id', doctorId),
+      [] as any[]
+    ),
   ]);
 
   const myPatientIds = (appts || []).map((a: any) => a.patient_id);
@@ -277,9 +353,15 @@ export async function loadProfessionalPractice(doctorId: string) {
     appointments: appts || [],
     prescriptions: prescriptions || [],
     referrals: referrals || [],
+    referralDoctors: (referralProfiles || [])
+      .map((profile: any) => mapDoctor(profile))
+      .filter((doctor: Doctor) => doctor.isBookable)
+      .map((doctor: Doctor) => ({
+        id: String(doctor.id),
+        name: doctor.name,
+        specialty: doctor.specialty,
+      })),
     rates: settings?.data || { doctor_share: 0.7 },
     payments: mine,
-    hospitals: hospitals || [],
-    labs: labs || [],
   };
 }

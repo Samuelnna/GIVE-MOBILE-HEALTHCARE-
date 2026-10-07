@@ -7,6 +7,7 @@
 CREATE TABLE IF NOT EXISTS public.referrals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   doctor_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+  referred_doctor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   patient_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
   hospital_id UUID REFERENCES public.hospitals(id) ON DELETE CASCADE,
   reason TEXT,

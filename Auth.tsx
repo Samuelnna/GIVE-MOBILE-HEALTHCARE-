@@ -18,6 +18,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [profRole, setProfRole] = useState('Doctor (MDCN)');
+  const [hospitalName, setHospitalName] = useState('');
   const [licenseNumber, setLicenseNumber] = useState('');
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -60,6 +61,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
         name: profileData?.full_name || data.user?.user_metadata?.full_name || 'User',
         email: data.user?.email || '',
         hospitalId: profileData?.hospital_id || `MH-${Math.floor(10000000 + Math.random() * 90000000)}`,
+        hospitalName: profileData?.hospital_name || data.user?.user_metadata?.hospital_name || undefined,
         userType: userType,
         imageUrl: profileData?.image_url || null,
         status: profileData?.status || (userType === 'admin' ? 'active' : (userType === 'professional' ? 'pending' : 'active')),
@@ -122,7 +124,8 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
           data: {
             full_name: fullName,
             user_type: 'professional',
-            role: profRole
+            role: profRole,
+            hospital_name: hospitalName.trim() || null
           }
         }
       });
@@ -185,6 +188,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
             email: email,
             user_type: 'professional',
             role: profRole,
+            hospital_name: hospitalName.trim() || null,
             status: 'pending'
           });
         if (profileError) {
@@ -192,6 +196,14 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
           // If we can't create the profile, the next step WILL fail, so we should report this
           throw new Error(`Profile creation failed: ${profileError.message} (${profileError.code})`);
         }
+      }
+
+      const { error: hospitalUpdateError } = await supabase
+        .from('profiles')
+        .update({ hospital_name: hospitalName.trim() || null })
+        .eq('id', userId);
+      if (hospitalUpdateError) {
+        throw new Error(`Could not save hospital name: ${hospitalUpdateError.message}`);
       }
 
       // Using upsert to handle potential retries or existing partial records
@@ -217,6 +229,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
         name: fullName,
         email: email,
         hospitalId: `MH-${Math.floor(10000000 + Math.random() * 90000000)}`,
+        hospitalName: hospitalName.trim() || undefined,
         userType: 'professional',
         status: 'pending'
       };
@@ -448,6 +461,19 @@ const Auth: React.FC<AuthProps> = ({ onLogin, onProfessionalSignUp, onBackToHome
         <option>Nurse (NMCN)</option>
         <option>Other</option>
       </select>
+      <div>
+        <label htmlFor="professional-hospital-name" className="mb-1 block text-sm font-bold text-slate-700">
+          Hospital or clinic
+        </label>
+        <input
+          id="professional-hospital-name"
+          type="text"
+          value={hospitalName}
+          onChange={(e) => setHospitalName(e.target.value)}
+          placeholder="Enter your hospital or clinic (optional)"
+          className="w-full rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
       <button onClick={() => setAuthStep('prof_signup_license')} className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-blue-700 transition-colors shadow-md mt-6">
         Continue
       </button>

@@ -5,6 +5,7 @@ import { HospitalIcon, BellIcon, ShoppingCartIcon, Cog6ToothIcon, PatientIcon, D
 import { requestNotificationPermission } from '../utils/notifications';
 import { CartItem, User } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
+import { FEATURES } from '../src/features';
 
 interface HeaderProps {
   user: User;
@@ -65,12 +66,13 @@ const Header: React.FC<HeaderProps> = ({ user, activeSection, setActiveSection, 
       ]
     : [
         { name: 'Dashboard', label: 'Home' },
+        { name: 'Health Articles', label: 'News & Articles' },
         { name: 'Health Summary', label: 'Health Summary' },
         { name: 'Appointments', label: 'Appointments' },
         { name: 'Messaging', label: 'Messages' },
-        { name: 'Hospitals', label: 'Hospitals' },
+        ...(FEATURES.hospitals ? [{ name: 'Hospitals' as const, label: 'Hospitals' }] : []),
         { name: 'Doctors', label: 'Doctors' },
-        { name: 'Labs', label: 'Labs' },
+        ...(FEATURES.labs ? [{ name: 'Labs' as const, label: 'Labs' }] : []),
         { name: 'Pharmacy', label: 'Pharmacy' },
         { name: 'Patient Records', label: 'My Records' },
       ];

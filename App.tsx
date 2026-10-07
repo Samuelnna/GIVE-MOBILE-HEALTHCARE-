@@ -25,6 +25,8 @@ import CheckoutModal from './components/CheckoutModal';
 import Footer from './components/Footer';
 import { supabase } from './src/supabaseClient';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
+import { FEATURES } from './src/features';
+import HealthArticles from './sections/HealthArticles';
 
 const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const [initialLoading, setInitialLoading] = useState(() => {
@@ -500,7 +502,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'Hospitals': return <Hospitals key={`hospitals-${activeSection}`} hospitals={hospitals || []} onScheduleService={handleScheduleHospitalService} />;
+      case 'Hospitals': return FEATURES.hospitals ? <Hospitals key={`hospitals-${activeSection}`} hospitals={hospitals || []} onScheduleService={handleScheduleHospitalService} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       case 'Doctors': return <Doctors key={`doctors-${activeSection}`} doctors={doctors || []} onBookAppointment={async (d) => {
           // New: Trigger payment before booking
           const { data: docProfile } = await supabase.from('profiles').select('subaccount_id').eq('id', d.doctor.id).single();
@@ -543,13 +545,16 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
           setMessageRecipient({ id: String(professional.id), name: professional.name, imageUrl: professional.imageUrl });
           setActiveSection('Messaging');
         }} />;
-      case 'Labs': return <Labs key={`labs-${activeSection}`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} />;
+      case 'Labs': return FEATURES.labs ? <Labs key={`labs-${activeSection}`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       case 'Pharmacy': return <Pharmacy key={`pharmacy-${activeSection}`} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med, quantity: q }]; }); }} onProceedToCheckout={() => setIsCheckoutOpen(true)} myMedications={myMedications} onSetReminder={() => {}} pharmacyItems={pharmacyItems || []} />;
       case 'Appointments': return <Appointments key={`appointments-${activeSection}`} user={currentUser!} appointments={appointments} hospitalAppointments={hospitalAppointments} labAppointments={labAppointments} doctors={doctors || []} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} onBookAppointment={() => {}} />;
       case 'Profile': return <Profile key={`profile-${activeSection}`} user={currentUser!} onUpdateUser={syncUserWithStorage} />;
       case 'Patient Records': return <PatientRecords key={`records-${activeSection}`} user={currentUser!} reports={triageReports} cards={[]} orders={pharmacyOrders} paymentHistory={paymentHistory} doctors={doctors} hospitals={hospitals} labTests={labTests} hospitalServiceCards={[]} medicationRecords={[]} purchasedMedications={[]} setActiveSection={setActiveSection} onScheduleFromReferral={() => {}} onPurchasePrescription={() => {}} />;
       case 'Messaging': return <Messaging key={`messages-${activeSection}`} initialRecipient={messageRecipient} onInitialRecipientHandled={() => setMessageRecipient(null)} setActiveSection={setActiveSection} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} />;
       case 'Health Summary': return <HealthSummary key={`summary-${activeSection}`} appointments={appointments} />;
+      case 'Health Articles': return currentUser?.userType === 'patient'
+        ? <HealthArticles />
+        : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       default: return <Dashboard key={`dashboard-${activeSection}`} user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
     }
   };

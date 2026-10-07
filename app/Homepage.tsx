@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import Footer from '../components/Footer';
 import Chatbot from '../components/Chatbot';
+import { FEATURES } from '../src/features';
 
 interface HomepageProps {
   onGetStarted: () => void;
@@ -10,9 +11,15 @@ interface HomepageProps {
 
 const services = [
   { label: 'AI triage', detail: 'Understand your next step before booking care.' },
-  { label: 'Online consultations', detail: 'Speak with verified healthcare professionals.' },
-  { label: 'Hospitals and labs', detail: 'Book services and keep results in one place.' },
+  { label: 'Audio and video consultations', detail: 'Speak with healthcare professionals remotely.' },
+  ...(FEATURES.hospitals
+    ? [{ label: 'Hospitals', detail: 'Find healthcare facilities and their services.' }]
+    : []),
+  ...(FEATURES.labs
+    ? [{ label: 'Labs and tests', detail: 'Book lab tests and keep results in one place.' }]
+    : []),
   { label: 'Prescriptions and pharmacy', detail: 'Move from clinical advice to medication access.' },
+  { label: 'Health news & articles', detail: 'Explore current health headlines and practical wellness reading.' },
 ];
 
 export default function Homepage({ onGetStarted }: HomepageProps) {
@@ -63,11 +70,11 @@ export default function Homepage({ onGetStarted }: HomepageProps) {
             <div className="flex animate-fade-in-up flex-col items-center">
               <p className="mb-5 text-xs font-black uppercase tracking-[0.25em] text-emerald-200">Digital healthcare, connected</p>
               <h1 className="max-w-3xl text-4xl font-black leading-[1.04] tracking-tight sm:text-6xl">Care that moves with you.</h1>
-              <p className="mt-6 max-w-2xl animate-fade-in-up text-lg font-medium leading-relaxed text-emerald-50/90 [animation-delay:150ms] sm:text-xl">From your first health question to a professional consultation, laboratory test, hospital visit, or prescription, MobileDoc brings the next step closer.</p>
+              <p className="mt-6 max-w-2xl animate-fade-in-up text-lg font-medium leading-relaxed text-emerald-50/90 [animation-delay:150ms] sm:text-xl">From your first health question to professional consultations and pharmacy support, MobileDoc brings the next step closer.</p>
               <div className="mt-9 flex animate-fade-in-up justify-center [animation-delay:300ms]">
                 <button onClick={onGetStarted} className="rounded-2xl bg-white px-6 py-3.5 text-sm font-black uppercase tracking-wide text-emerald-950 shadow-xl transition hover:bg-emerald-50">Get started</button>
               </div>
-              <p className="mt-5 animate-fade-in-up text-xs font-semibold text-emerald-100/70 [animation-delay:450ms]">For patients, healthcare professionals, hospitals, laboratories, and pharmacies.</p>
+              <p className="mt-5 animate-fade-in-up text-xs font-semibold text-emerald-100/70 [animation-delay:450ms]">For patients and healthcare professionals.</p>
             </div>
           </div>
         </section>
@@ -76,9 +83,12 @@ export default function Homepage({ onGetStarted }: HomepageProps) {
           <div className="max-w-2xl">
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">The care network</p>
             <h2 className="mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl">Everything you need to keep care moving.</h2>
-            <p className="mt-4 leading-relaxed text-slate-600">MobileDoc connects the people and services around a patient, so important steps do not get lost between a consultation, referral, test, and treatment plan.</p>
+            <p className="mt-4 leading-relaxed text-slate-600">MobileDoc connects patients with healthcare professionals, helping important steps stay connected from consultation to follow-up.</p>
           </div>
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div
+            className="mt-10 grid gap-4"
+            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 18rem), 1fr))' }}
+          >
             {services.map((service, index) => (
               <article key={service.label} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                 <span className="text-sm font-black text-emerald-700">0{index + 1}</span>

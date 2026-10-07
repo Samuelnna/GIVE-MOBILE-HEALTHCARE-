@@ -2,9 +2,10 @@
 import React from 'react';
 import type { Section, User } from '../types';
 import FeatureCard from '../components/FeatureCard';
-import { HospitalIcon, DoctorIcon, LabIcon, PharmacyIcon, CalendarIcon, MessageIcon, HeartPulseIcon, HeartIcon, ClipboardDocumentListIcon, SparklesIcon, CheckCircleIcon } from '../components/IconComponents';
+import { HospitalIcon, DoctorIcon, LabIcon, PharmacyIcon, CalendarIcon, MessageIcon, HeartPulseIcon, HeartIcon, ClipboardDocumentListIcon, SparklesIcon, CheckCircleIcon, VideoCameraIcon, LightBulbIcon } from '../components/IconComponents';
 import HealthTopics from '../components/HealthTopics';
 import HeroSlideshow from '../components/HeroSlideshow';
+import { FEATURES } from '../src/features';
 
 interface DashboardProps {
   user: User;
@@ -54,7 +55,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveSection, openTriag
           <FeatureCard
             icon={<ClipboardDocumentListIcon className="h-10 w-10" />}
             title="Patient Records"
-            description="View your triage reports and virtual hospital cards."
+            description="View your triage reports and care records."
             onClick={() => setActiveSection('Patient Records')}
           />
            <FeatureCard
@@ -69,12 +70,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveSection, openTriag
             description="Manage your upcoming and past appointments."
             onClick={() => setActiveSection('Appointments')}
           />
-          <FeatureCard
-            icon={<HospitalIcon className="h-10 w-10" />}
-            title="Hospitals"
-            description="Find accredited hospitals and their services."
-            onClick={() => setActiveSection('Hospitals')}
-          />
+          {FEATURES.hospitals && (
+            <FeatureCard
+              icon={<HospitalIcon className="h-10 w-10" />}
+              title="Hospitals"
+              description="Find accredited hospitals and their services."
+              onClick={() => setActiveSection('Hospitals')}
+            />
+          )}
           <FeatureCard
             icon={<DoctorIcon className="h-10 w-10" />}
             title="Doctors"
@@ -82,17 +85,33 @@ const Dashboard: React.FC<DashboardProps> = ({ user, setActiveSection, openTriag
             onClick={() => setActiveSection('Doctors')}
           />
           <FeatureCard
-            icon={<LabIcon className="h-10 w-10" />}
-            title="Lab & Tests"
-            description="Schedule lab tests and view your reports online."
-            onClick={() => setActiveSection('Labs')}
+            icon={<VideoCameraIcon className="h-10 w-10" />}
+            title="Audio & Video Consultations"
+            description="Book a remote consultation with a healthcare professional."
+            onClick={() => setActiveSection('Doctors')}
           />
+          {FEATURES.labs && (
+            <FeatureCard
+              icon={<LabIcon className="h-10 w-10" />}
+              title="Lab & Tests"
+              description="Schedule lab tests and view your reports online."
+              onClick={() => setActiveSection('Labs')}
+            />
+          )}
           <FeatureCard
             icon={<PharmacyIcon className="h-10 w-10" />}
             title="Pharmacy"
             description="Order prescriptions and wellness products."
             onClick={() => setActiveSection('Pharmacy')}
           />
+          {user.userType === 'patient' && (
+            <FeatureCard
+              icon={<LightBulbIcon className="h-10 w-10" />}
+              title="Health News & Articles"
+              description="Browse recent health news and practical wellness articles."
+              onClick={() => setActiveSection('Health Articles')}
+            />
+          )}
         </div>
 
         <a

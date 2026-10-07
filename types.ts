@@ -1,7 +1,7 @@
 
 import React from 'react';
 
-export type Section = 'Dashboard' | 'Hospitals' | 'Doctors' | 'Labs' | 'Pharmacy' | 'Appointments' | 'Messaging' | 'Health Summary' | 'Profile' | 'Vitals' | 'Patient Records';
+export type Section = 'Dashboard' | 'Hospitals' | 'Doctors' | 'Labs' | 'Pharmacy' | 'Appointments' | 'Messaging' | 'Health Summary' | 'Health Articles' | 'Profile' | 'Vitals' | 'Patient Records';
 
 
 export interface User {

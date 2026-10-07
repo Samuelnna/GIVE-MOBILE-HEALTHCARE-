@@ -6,6 +6,7 @@ import { CalendarIcon, CheckCircleIcon, HospitalIcon, PillIcon, CreditCardIcon, 
 import ReferralModal from '../components/ReferralModal';
 import PrescribeModal from '../components/PrescribeModal';
 import { useNotification } from '../contexts/NotificationContext';
+import { FEATURES } from '../src/features';
 
 const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; setActiveSection: (s: any) => void; onLogout: () => void }> = ({ user, appointments, setActiveSection, onLogout }) => {
   const seedAppts = (appointments || []).map((a: any) => ({
@@ -17,8 +18,7 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
   const [realAppts, setRealAppts] = useState<any[]>(seedAppts);
   const [activeTab, setActiveTab] = useState<'overview' | 'appointments' | 'financials' | 'referrals'>('overview');
   const [stats, setRealStats] = useState({ total: 0, pending: 0, upcoming: 0, completed: 0 });
-  const [hospitals, setHospitals] = useState<any[]>([]);
-  const [labs, setLabs] = useState<any[]>([]);
+  const [referralDoctors, setReferralDoctors] = useState<{ id: string; name: string; specialty?: string }[]>([]);
   const [referringPatient, setReferringPatient] = useState<{id: string, name: string} | null>(null);
   const [prescribingPatient, setPrescribingPatient] = useState<{id: string, name: string} | null>(null);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
@@ -53,16 +53,6 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
         .eq('doctor_id', user.id)
         .order('created_at', { ascending: false });
     if (data) setPrescriptions(data);
-  };
-
-  const fetchReferrals = async () => {
-    if (!user?.id) return;
-    const { data } = await supabase
-        .from('referrals')
-        .select('*, patient:profiles!referrals_patient_id_fkey(full_name), hospital:hospitals(name), lab:labs(name)')
-        .eq('doctor_id', user.id)
-        .order('created_at', { ascending: false });
-    if (data) setReferrals(data);
   };
 
   const fetchEarnings = async () => {
@@ -124,8 +114,7 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
     setReferrals(bundle.referrals);
     setDynamicRates(bundle.rates);
     setPayments(bundle.payments);
-    setHospitals(bundle.hospitals);
-    setLabs(bundle.labs);
+    setReferralDoctors(bundle.referralDoctors);
   };
 
   useEffect(() => {
@@ -180,26 +169,24 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
     if (!error) fetchAppts();
   };
 
-  const handleRefer = async (details: { hospitalId?: string, labId?: string, reason: string }) => {
+  const handleRefer = async (details: { referredDoctorId: string; reason: string }) => {
+    if (!FEATURES.doctorReferrals || details.referredDoctorId === user.id) return;
     if (!referringPatient) return;
     
     const { error } = await supabase.from('referrals').insert([{
         patient_id: referringPatient.id,
         doctor_id: user.id,
-        hospital_id: details.hospitalId,
-        lab_id: details.labId,
+        referred_doctor_id: details.referredDoctorId,
         reason: details.reason,
         status: 'pending'
     }]);
 
     if (!error) {
-        const targetName = details.hospitalId 
-            ? hospitals.find(h => h.id === details.hospitalId)?.name 
-            : labs.find(l => l.id === details.labId)?.name;
+        const targetName = referralDoctors.find(doctor => doctor.id === details.referredDoctorId)?.name || 'the selected doctor';
 
         addNotification('Referral Sent', `Patient referred to ${targetName}`, 'success');
         setReferringPatient(null);
-        fetchReferrals();
+        loadProfessionalPractice(user.id).then(applyPractice);
     } else {
         addNotification('Error', `Failed to send referral: ${error.message}`, 'error');
     }
@@ -214,13 +201,19 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
           <div>
             <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight text-center md:text-left">Professional Dashboard</h1>
             <p className="text-slate-500 font-medium mt-1 text-sm sm:text-base text-center md:text-left truncate">Welcome back, {user.name}.</p>
+            {user.hospitalName && (
+              <p className="mt-2 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-800">
+                <HospitalIcon className="h-4 w-4" />
+                {user.hospitalName}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl overflow-x-auto scrollbar-hide no-scrollbar">
               {[
                 { id: 'overview', label: 'Overview' },
                 { id: 'appointments', label: 'Appointments' },
                 { id: 'financials', label: 'Financials' },
-                { id: 'referrals', label: 'Referrals' }
+                ...(FEATURES.doctorReferrals ? [{ id: 'referrals', label: 'Referrals' }] : [])
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -419,13 +412,13 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
                                     {appt.status === 'Upcoming' && (
                                         <>
                                             <button onClick={() => updateStatus(appt.id, 'Completed')} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded" title="Mark Completed"><CheckCircleIcon className="w-5 h-5"/></button>
-                                            <button 
+                                            {FEATURES.doctorReferrals && <button
                                                 onClick={() => setReferringPatient({ id: appt.patient_id, name: appt.patient?.full_name })} 
                                                 className="p-1.5 text-sky-600 hover:bg-sky-50 rounded" 
-                                                title="Refer to Hospital/Lab"
+                                                title="Refer to another doctor"
                                             >
-                                                <HospitalIcon className="w-5 h-5"/>
-                                            </button>
+                                                <DoctorProfileIcon className="w-5 h-5"/>
+                                            </button>}
                                             <button 
                                                 onClick={() => setPrescribingPatient({ id: appt.patient_id, name: appt.patient?.full_name })} 
                                                 className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded" 
@@ -470,9 +463,11 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
                             <tr key={r.id}>
                                 <td className="px-6 py-4 font-bold text-slate-700">{r.patient?.full_name}</td>
                                 <td className="px-6 py-4 text-slate-600">
-                                    {r.hospital?.name || r.lab?.name || 'N/A'}
+                                    {r.referred_doctor_id === user.id
+                                      ? `From ${r.doctor?.full_name || 'another doctor'}`
+                                      : `To ${r.referred_doctor?.full_name || 'Doctor'}`}
                                     <span className="ml-2 text-[10px] text-slate-400 uppercase font-bold">
-                                        ({r.hospital_id ? 'Hospital' : 'Lab'})
+                                        {r.referred_doctor_id === user.id ? '(Received)' : '(Sent)'}
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 max-w-xs truncate">{r.reason}</td>
@@ -523,11 +518,10 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
       </div>
       )}
 
-      {referringPatient && (
+      {referringPatient && FEATURES.doctorReferrals && (
           <ReferralModal 
             patient={referringPatient} 
-            hospitals={hospitals} 
-            labs={labs}
+            doctors={referralDoctors}
             onClose={() => setReferringPatient(null)} 
             onRefer={handleRefer}
           />

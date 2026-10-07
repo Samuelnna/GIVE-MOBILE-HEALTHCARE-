@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Section } from '../types';
 import { ChatIcon, CloseIcon, SendIcon } from './IconComponents';
+import { FEATURES } from '../src/features';
 
 type GuideAction =
   | { kind: 'navigate'; label: string; section: Section }
@@ -79,12 +80,24 @@ const Chatbot: React.FC<ChatbotProps> = ({
       ]);
     }
     if (/(lab|test|blood|scan|result)/.test(text)) {
+      if (!FEATURES.labs) {
+        return makeMessage('guide', 'Laboratory booking is not currently available in MobileDoc. Please contact your healthcare professional to discuss testing, or reach our team for help.', [
+          serviceAction('Doctors', 'Contact a doctor'),
+          whatsapp,
+        ]);
+      }
       return makeMessage('guide', 'Browse available laboratory tests to find a service. If a clinician asked for a specific test, use the name on your referral or contact us for help.', [
         serviceAction('Labs', 'Browse lab tests'),
         whatsapp,
       ]);
     }
     if (/(hospital|clinic|facility|admission)/.test(text)) {
+      if (!FEATURES.hospitals) {
+        return makeMessage('guide', 'Hospital booking is not currently available in MobileDoc. For urgent symptoms, go to the nearest emergency department now. For non-urgent care, contact a healthcare professional.', [
+          serviceAction('Doctors', 'Find a doctor'),
+          whatsapp,
+        ]);
+      }
       return makeMessage('guide', 'You can browse hospitals and their listed services. For urgent symptoms, go to the nearest emergency department rather than waiting for an online reply.', [
         serviceAction('Hospitals', 'Browse hospitals'),
         whatsapp,
@@ -107,14 +120,14 @@ const Chatbot: React.FC<ChatbotProps> = ({
       return makeMessage('guide', 'You can reach the MobileDoc team directly on WhatsApp.', [whatsapp]);
     }
     if (/(what is mobile ?doc|about mobile ?doc|how does this work|what can you do|help)/.test(text)) {
-      return makeMessage('guide', 'MobileDoc connects patients with healthcare professionals, hospitals, laboratories, and pharmacy services. I’m an automated guide for finding the right place in the app; I don’t provide medical care.', [
+      return makeMessage('guide', 'MobileDoc connects patients with healthcare professionals and pharmacy services. I’m an automated guide for finding the right place in the app; I don’t provide medical care.', [
         serviceAction('Doctors', 'Find a professional'),
         triage,
         whatsapp,
       ]);
     }
 
-    return makeMessage('guide', 'I can help you find a doctor, hospital, lab test, pharmacy service, or the symptom triage. For medical decisions, speak with a licensed professional. What do you need help with?', [
+    return makeMessage('guide', 'I can help you find a doctor, pharmacy service, or symptom triage. For medical decisions, speak with a licensed professional. What do you need help with?', [
       serviceAction('Doctors', 'Find a doctor'),
       serviceAction('Pharmacy', 'Prescription or pharmacy'),
       triage,

@@ -331,9 +331,13 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const fetchReferrals = async () => {
     const { data, error } = await supabase
         .from('referrals')
-        .select('*, patient:profiles!referrals_patient_id_fkey(full_name), doctor:profiles!referrals_doctor_id_fkey(full_name), hospital:hospitals(name), lab:labs(name)')
+        .select('*, patient:profiles!referrals_patient_id_fkey(full_name), doctor:profiles!referrals_doctor_id_fkey(full_name), referred_doctor:profiles!referrals_referred_doctor_id_fkey(full_name), hospital:hospitals(name), lab:labs(name)')
         .order('created_at', { ascending: false });
-    if (!error) setReferrals(data || []);
+    if (error) {
+        console.error('AdminDashboard: Referrals fetch error:', error);
+        return;
+    }
+    setReferrals(data || []);
   };
 
   const fetchPrescriptions = async () => {
@@ -1096,8 +1100,10 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                 <td className="py-3 font-bold text-slate-700">{r.patient?.full_name}</td>
                                 <td className="py-3 text-slate-500">{r.doctor?.full_name}</td>
                                 <td className="py-3 font-bold text-sky-600">
-                                    {r.hospital?.name || r.lab?.name || 'N/A'}
-                                    <span className="ml-1 text-[9px] text-slate-400">({r.hospital_id ? 'Hosp' : 'Lab'})</span>
+                                    {r.referred_doctor?.full_name || r.hospital?.name || r.lab?.name || 'N/A'}
+                                    <span className="ml-1 text-[9px] text-slate-400">
+                                        ({r.referred_doctor_id ? 'Doctor' : r.hospital_id ? 'Hosp' : 'Lab'})
+                                    </span>
                                 </td>
                                 <td className="py-3 text-slate-500 max-w-xs truncate">{r.reason}</td>
                                 <td className="py-3">

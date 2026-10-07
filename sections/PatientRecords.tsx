@@ -4,6 +4,7 @@ import { getAuthedUserId, supabase } from '../src/supabaseClient';
 import { TriageReport, VirtualCard, Order, Doctor, Hospital, LabTest, MedicationRecord, Medication } from '../types';
 import { CheckCircleIcon, DocumentTextIcon, CalendarIcon, ShoppingCartIcon, HospitalIcon, BellIcon } from '../components/IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
+import { FEATURES } from '../src/features';
 
 interface PatientRecordsProps {
     user: any;
@@ -68,7 +69,8 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
       const { data: hospData } = await supabase.from('hospital_appointments').select('*, hospital:hospitals(*)').eq('patient_id', authUserId).order('date', { ascending: false });
       if (hospData) setHospAppts(hospData);
 
-      const { data: refData } = await supabase.from('referrals').select('*, doctor:profiles!referrals_doctor_id_fkey(full_name), hospital:hospitals(*), lab:labs(*)').eq('patient_id', authUserId).order('created_at', { ascending: false });
+      const { data: refData, error: referralError } = await supabase.from('referrals').select('*, doctor:profiles!referrals_doctor_id_fkey(full_name), referred_doctor:profiles!referrals_referred_doctor_id_fkey(full_name, role, specialty), hospital:hospitals(*), lab:labs(*)').eq('patient_id', authUserId).order('created_at', { ascending: false });
+      if (referralError) console.error('PatientRecords: Referral fetch error:', referralError);
       if (refData) setReferrals(refData);
 
       console.log('PatientRecords: Fetching prescriptions for patient:', authUserId);
@@ -138,7 +140,10 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                             <p className="text-sm text-slate-600 mb-2"><strong>Diagnosis:</strong> {r.diagnosis}</p>
                             <p className="text-sm text-slate-600 mb-4"><strong>Treatment Plan:</strong> {r.treatment_plan}</p>
                             <div className="flex gap-4">
-                                {r.data?.referrals?.map((ref: any, idx: number) => {
+                                {r.data?.referrals?.filter((ref: any) =>
+                                    (ref.type !== 'Hospital' || FEATURES.hospitals) &&
+                                    ((ref.type !== 'Laboratory' && ref.type !== 'Lab') || FEATURES.labs)
+                                ).map((ref: any, idx: number) => {
                                     const type = ref.type === 'Lab' ? 'Laboratory' : ref.type;
                                     const available = type === 'Doctor' ? doctors.length : type === 'Hospital' ? hospitals.length : type === 'Laboratory' ? labTests.length : 0;
                                     const section = type === 'Doctor' ? 'Doctors' : type === 'Hospital' ? 'Hospitals' : type === 'Laboratory' ? 'Labs' : 'Pharmacy';
@@ -196,9 +201,9 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                             <div className="flex justify-between items-start mb-4">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">
-                                        Referral to {r.hospital?.name || r.lab?.name || 'Medical Facility'}
+                                        Referral to {r.referred_doctor?.full_name || r.hospital?.name || r.lab?.name || 'Medical service'}
                                         <span className="ml-2 text-xs text-slate-400 font-normal">
-                                            ({r.hospital_id ? 'Hospital' : 'Laboratory'})
+                                            ({r.referred_doctor_id ? 'Doctor' : r.hospital_id ? 'Hospital' : 'Laboratory'})
                                         </span>
                                     </h3>
                                     <p className="text-sm text-slate-500">From {r.doctor?.full_name} • {new Date(r.created_at).toLocaleDateString()}</p>
@@ -206,7 +211,15 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                                 <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded text-[10px] font-bold uppercase">{r.status}</span>
                             </div>
                             <p className="text-sm text-slate-600 mb-4"><strong>Reason:</strong> {r.reason}</p>
-                            {r.status === 'pending' && (
+                            {r.referred_doctor_id && FEATURES.doctorReferrals && (
+                                <button
+                                    onClick={() => setActiveSection('Doctors')}
+                                    className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-indigo-700"
+                                >
+                                    View Doctors
+                                </button>
+                            )}
+                            {r.status === 'pending' && ((r.hospital_id && FEATURES.hospitals) || (r.lab_id && FEATURES.labs)) && (
                                 r.hospital_id ? (
                                     <button 
                                         onClick={() => handleScheduleFromReferralLocal(r.hospital_id, r.id)}
