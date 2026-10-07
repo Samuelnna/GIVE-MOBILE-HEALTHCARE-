@@ -9,7 +9,6 @@ import Hospitals from './sections/Hospitals';
 import Doctors from './sections/Doctors';
 import Labs from './sections/Labs';
 import Pharmacy from './sections/Pharmacy';
-import Chatbot from './components/Chatbot';
 import Auth from './Auth';
 import Appointments from './sections/Appointments';
 import Messaging from './sections/Messaging';
@@ -578,13 +577,6 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
             renderSection())}
         </div>
       </main>
-      {currentUser.userType === 'patient' && (
-        <Chatbot
-          isAuthenticated
-          onNavigate={setActiveSection}
-          onOpenTriage={() => setIsAssistantOpen(true)}
-        />
-      )}
       {isAssistantOpen && <AITriageAssistant
         doctors={doctors}
         hospitals={hospitals}

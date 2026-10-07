@@ -269,6 +269,7 @@ interface PharmacyProps {
 const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedToCheckout, myMedications, onSetReminder, pharmacyItems, medicationRecords }) => {
   const [activeTab, setActiveTab] = useState<'shop' | 'myMedications'>('shop');
   const [searchTerm, setSearchTerm] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedLocation, setSelectedLocation] = useState('All Locations');
   const [selectedMed, setSelectedMed] = useState<Medication | null>(null);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
@@ -349,6 +350,21 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
     }, [searchTerm, selectedLocation, sortOption, availableMedications]);
 
   const handleLoadMore = () => setVisibleCount(prev => prev + ITEMS_PER_PAGE);
+
+  const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    setSearchTerm(nextValue);
+    setVisibleCount(ITEMS_PER_PAGE);
+
+    requestAnimationFrame(() => {
+      const input = searchInputRef.current;
+      if (!input) return;
+
+      const caretPosition = nextValue.length;
+      input.focus();
+      input.setSelectionRange(caretPosition, caretPosition);
+    });
+  };
 
     const handlePrescriptionUpload = async () => {
         if (!prescriptionFile || isUploadingPrescription) return;
@@ -469,15 +485,13 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
                         <span className="sr-only">Search medication</span>
                         <SearchIcon className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
                         <input
+                          ref={searchInputRef}
                           type="search"
                           inputMode="search"
                           autoComplete="off"
                           placeholder="Search medication..."
                           value={searchTerm}
-                          onChange={(e) => {
-                            setSearchTerm(e.target.value);
-                            setVisibleCount(ITEMS_PER_PAGE);
-                          }}
+                          onChange={handleSearchChange}
                           className="block w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3.5 pl-11 font-medium outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10"
                         />
                     </label>
