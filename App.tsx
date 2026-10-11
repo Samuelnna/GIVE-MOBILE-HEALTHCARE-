@@ -25,9 +25,7 @@ import CheckoutModal from './components/CheckoutModal';
 import Footer from './components/Footer';
 import { supabase } from './src/supabaseClient';
 import {
-  isDoctorConsultationPaymentConfigured,
-  isProfessionalConsultationPaymentConfigured,
-  recordVerifiedDoctorConsultation,
+  getProfessionalConsultationPaymentConfiguration,
   recordVerifiedProfessionalConsultation,
 } from './app/actions/consultation-payment';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
@@ -528,8 +526,13 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     switch (activeSection) {
       case 'Hospitals': return FEATURES.hospitals ? <Hospitals key={`hospitals-${activeSection}`} hospitals={hospitals || []} onScheduleService={handleScheduleHospitalService} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       case 'Doctors': return <Doctors key={`doctors-${activeSection}`} doctors={doctors || []} onBookAppointment={async (d) => {
-          if (!await isProfessionalConsultationPaymentConfigured()) {
-              addNotification('Consultation payments unavailable', 'Secure consultation payment verification is not configured. Please contact support.', 'error');
+          const paymentConfiguration = await getProfessionalConsultationPaymentConfiguration();
+          if (!paymentConfiguration.configured) {
+              addNotification(
+                  'Consultation payments unavailable',
+                  `Payment verification is missing server configuration: ${paymentConfiguration.missing.join(', ')}. Please contact support.`,
+                  'error'
+              );
               return;
           }
 

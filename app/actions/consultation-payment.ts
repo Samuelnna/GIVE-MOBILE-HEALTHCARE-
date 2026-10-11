@@ -5,13 +5,25 @@ import { createClient } from '@supabase/supabase-js';
 const CONSULTATION_FEE = 1000;
 const CURRENCY = 'NGN';
 
+export async function getProfessionalConsultationPaymentConfiguration() {
+  const missing: string[] = [];
+  if (!(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL)) {
+    missing.push('NEXT_PUBLIC_SUPABASE_URL (or VITE_SUPABASE_URL)');
+  }
+  if (!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY)) {
+    missing.push('NEXT_PUBLIC_SUPABASE_ANON_KEY (or VITE_SUPABASE_ANON_KEY)');
+  }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    missing.push('SUPABASE_SERVICE_ROLE_KEY');
+  }
+  if (!process.env.FLUTTERWAVE_SECRET_KEY) {
+    missing.push('FLUTTERWAVE_SECRET_KEY');
+  }
+  return { configured: missing.length === 0, missing };
+}
+
 export async function isProfessionalConsultationPaymentConfigured() {
-  return Boolean(
-    (process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.VITE_SUPABASE_URL) &&
-    (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY) &&
-    process.env.SUPABASE_SERVICE_ROLE_KEY &&
-    process.env.FLUTTERWAVE_SECRET_KEY
-  );
+  return (await getProfessionalConsultationPaymentConfiguration()).configured;
 }
 
 export async function isDoctorConsultationPaymentConfigured() {
