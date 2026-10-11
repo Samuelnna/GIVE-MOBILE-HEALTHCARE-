@@ -6,7 +6,7 @@ import { useNotification } from '../contexts/NotificationContext';
 
 interface Convo {
     id: string;
-    participant: { name: string; imageUrl: string };
+    participant: { name: string; imageUrl: string; userType?: string; requiresConsultation?: boolean };
     messages: any[];
 }
 
@@ -14,6 +14,13 @@ interface MessageRecipient {
     id: string;
     name: string;
     imageUrl: string;
+    requiresConsultation?: boolean;
+}
+
+function isProfessionalProfile(profile: any) {
+    if (profile?.user_type === 'professional') return true;
+    const profileText = `${profile?.role || ''} ${profile?.specialty || ''}`;
+    return /(doctor|physician|surgeon|consultant|general practitioner|gp|cardiologist|neurologist|pediatrician|dentist|nurse|midwife|pharmacist|lab scientist|laboratory scientist|specialist|therapist)/i.test(profileText);
 }
 
 const Messaging: React.FC<{
@@ -34,6 +41,8 @@ const Messaging: React.FC<{
   const [conversations, setConversations] = useState<Convo[]>([]);
   const [selectedConvo, setSelectedConvo] = useState<Convo | null>(null);
   const [isGated, setIsGated] = useState(false);
+  const [isCheckingAccess, setIsCheckingAccess] = useState(false);
+  const [accessError, setAccessError] = useState('');
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
@@ -55,7 +64,7 @@ const Messaging: React.FC<{
 
     const { data } = await supabase
         .from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url)')
+        .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url, user_type, role, specialty), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url, user_type, role, specialty)')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
     
@@ -68,7 +77,12 @@ const Messaging: React.FC<{
             if (!groups[otherUser.id]) {
                 groups[otherUser.id] = {
                     id: otherUser.id,
-                    participant: { name: (otherUser as any).full_name, imageUrl: (otherUser as any).image_url || '' },
+                    participant: {
+                        name: (otherUser as any).full_name,
+                        imageUrl: (otherUser as any).image_url || '',
+                        userType: (otherUser as any).user_type,
+                        requiresConsultation: isProfessionalProfile(otherUser),
+                    },
                     messages: []
                 };
             }
@@ -95,7 +109,7 @@ const Messaging: React.FC<{
     const fetchProfiles = async () => {
         const userId = await getAuthedUserId();
         if (!userId) return;
-        const { data } = await supabase.from('profiles').select('id, full_name, user_type, image_url').neq('id', userId);
+        const { data } = await supabase.from('profiles').select('id, full_name, user_type, image_url, role, specialty').neq('id', userId);
         if (data) setAllProfiles(data);
     };
     fetchProfiles();
@@ -126,16 +140,19 @@ const Messaging: React.FC<{
             const existing = loadedConversations.find(conversation => conversation.id === initialRecipient.id);
             const conversation = existing || {
                 id: initialRecipient.id,
-                participant: { name: initialRecipient.name, imageUrl: initialRecipient.imageUrl },
+                participant: {
+                    name: initialRecipient.name,
+                    imageUrl: initialRecipient.imageUrl,
+                    userType: 'professional',
+                    requiresConsultation: initialRecipient.requiresConsultation,
+                },
                 messages: []
             };
 
             if (!existing) {
                 setConversations(current => [conversation, ...current.filter(item => item.id !== conversation.id)]);
             }
-            setSelectedConvo(conversation);
-            setMessages(conversation.messages);
-            setIsGated(false);
+            await openConversation(conversation);
             onInitialRecipientHandled?.();
         };
 
@@ -149,22 +166,77 @@ const Messaging: React.FC<{
       const userId = await getAuthedUserId();
       if (!userId) return;
 
-      setIsGated(false);
       const existing = conversations.find(c => c.id === profile.id);
-      if (existing) {
-          setSelectedConvo(existing);
-          setMessages(existing.messages);
-      } else {
-          const newConvo: Convo = {
-              id: profile.id,
-              participant: { name: profile.full_name, imageUrl: profile.image_url || '' },
-              messages: []
-          };
-          setConversations(prev => [newConvo, ...prev]);
-          setSelectedConvo(newConvo);
-          setMessages([]);
-      }
+      const conversation: Convo = existing || {
+          id: profile.id,
+          participant: {
+              name: profile.full_name,
+              imageUrl: profile.image_url || '',
+              userType: profile.user_type,
+              requiresConsultation: isProfessionalProfile(profile),
+          },
+          messages: []
+      };
+      if (!existing) setConversations(prev => [conversation, ...prev]);
+      await openConversation(conversation);
       setShowUserList(false);
+  };
+
+  const openConversation = async (conversation: Convo) => {
+      setSelectedConvo(conversation);
+      setMessages(conversation.messages);
+      setIsGated(true);
+      setIsCheckingAccess(true);
+      setAccessError('');
+
+      const userId = await getAuthedUserId();
+      if (!userId) {
+          setAccessError('Please sign in again to verify your messaging access.');
+          setIsCheckingAccess(false);
+          return;
+      }
+
+      const { data: userProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('user_type')
+          .eq('id', userId)
+          .single();
+
+      if (profileError) {
+          console.error('Could not verify messaging access:', profileError);
+          setAccessError('We could not verify your account. Please try again.');
+          addNotification('Messaging unavailable', 'We could not verify your account. Please try again.', 'error');
+          setIsCheckingAccess(false);
+          return;
+      }
+
+      if (userProfile.user_type !== 'patient' || !conversation.participant.requiresConsultation) {
+          setIsGated(false);
+          setIsCheckingAccess(false);
+          return;
+      }
+
+      const { data: payments, error: paymentError } = await supabase
+          .from('payments')
+          .select('details, payment_type')
+          .eq('user_id', userId)
+          .in('payment_type', ['doctor_consultation', 'professional_consultation'])
+          .in('status', ['successful', 'completed']);
+
+      if (paymentError) {
+          console.error('Could not verify consultation payment:', paymentError);
+          setAccessError('We could not verify your consultation payment. Please try again.');
+          addNotification('Messaging unavailable', 'We could not verify your consultation payment. Please try again.', 'error');
+          setIsCheckingAccess(false);
+          return;
+      }
+
+      const hasPaidThisProfessional = (payments || []).some((payment) => {
+          const details = payment.details || {};
+          return String(details.professional_id || details.doctor_id) === conversation.id;
+      });
+      setIsGated(!hasPaidThisProfessional);
+      setIsCheckingAccess(false);
   };
 
   const handleSendMessage = async () => {
@@ -181,6 +253,9 @@ const Messaging: React.FC<{
     if (!error) {
         setInputText('');
         fetchConversations();
+    } else {
+        console.error('Message could not be sent:', error);
+        addNotification('Message not sent', 'You need a successful consultation with this professional before messaging them.', 'error');
     }
   };
 
@@ -203,11 +278,7 @@ const Messaging: React.FC<{
             {conversations.map(convo => (
                 <div 
                     key={convo.id} 
-                    onClick={async () => { 
-                        setSelectedConvo(convo); 
-                        setMessages(convo.messages);
-                        setIsGated(false);
-                    }} 
+                    onClick={() => { void openConversation(convo); }}
                     className={`flex items-center p-4 cursor-pointer border-b border-slate-50 transition-colors ${selectedConvo?.id === convo.id ? 'bg-sky-50' : 'hover:bg-slate-50'}`}
                 >
                     <div className="relative">
@@ -267,13 +338,26 @@ const Messaging: React.FC<{
                             <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mb-6 border border-slate-100">
                                 <CreditCardIcon className="h-10 w-10 text-slate-300" />
                             </div>
-                            <h2 className="text-2xl font-black text-slate-800 mb-2">Consultation Required</h2>
-                            <p className="text-slate-500 max-w-sm mb-8 font-medium">To maintain professional quality, messaging with {selectedConvo.participant.name} requires an active consultation.</p>
+                            <h2 className="text-2xl font-black text-slate-800 mb-2">
+                                {isCheckingAccess
+                                  ? 'Checking access'
+                                  : accessError
+                                    ? 'Unable to verify access'
+                                    : 'Consultation Required'}
+                            </h2>
+                            <p className="text-slate-500 max-w-sm mb-8 font-medium">
+                                {isCheckingAccess
+                                  ? 'Please wait while we verify your consultation.'
+                                  : accessError
+                                    ? accessError
+                                    : `Messaging with ${selectedConvo.participant.name} is available after you have paid for a consultation with this professional.`}
+                            </p>
                             <button 
-                                onClick={() => setActiveSection('Doctors')}
+                                onClick={() => accessError ? void openConversation(selectedConvo) : setActiveSection('Doctors')}
+                                disabled={isCheckingAccess}
                                 className="px-8 py-3 bg-sky-600 text-white font-bold rounded-xl shadow-lg shadow-sky-200 hover:bg-sky-700 transition-all active:scale-95 uppercase tracking-widest text-xs"
                             >
-                                Book Consultation
+                                {isCheckingAccess ? 'Please wait' : accessError ? 'Try Again' : 'Book Consultation'}
                             </button>
                         </div>
                     ) : (

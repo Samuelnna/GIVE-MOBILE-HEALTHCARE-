@@ -53,11 +53,7 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onMe
             ))}
           </div>
         </div>
-        {doctor.isBookable ? (
-          <button onClick={onBookAppointment} className="w-full mt-2 py-3 bg-sky-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-100 active:scale-95">Book Appointment</button>
-        ) : (
-          <button onClick={onMessage} className="w-full mt-2 py-3 bg-slate-700 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-slate-800 transition-all shadow-lg shadow-slate-200 active:scale-95">Message</button>
-        )}
+        <button onClick={onBookAppointment} className="w-full mt-2 py-3 bg-sky-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-100 active:scale-95">Book Consultation</button>
       </div>
     </div>
   );
@@ -123,7 +119,7 @@ const Doctors: React.FC<DoctorsProps> = ({ doctors, onMessageProfessional, onBoo
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="bg-white p-8 rounded-lg shadow-md mb-8">
           <h1 className="text-3xl font-bold text-slate-800 mb-2">Find a Healthcare Professional</h1>
-          <p className="text-slate-600 mb-6">Search by specialty or professional type. Doctor bookings remain available for medical doctors only.</p>
+          <p className="text-slate-600 mb-6">Search by specialty or professional type. Patients can book a consultation with any verified professional in the network.</p>
           <input
             type="text"
             placeholder="Search by name, specialty, or hospital..."

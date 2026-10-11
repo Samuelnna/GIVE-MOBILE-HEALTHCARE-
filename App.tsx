@@ -24,6 +24,12 @@ import PatientRecords from './sections/PatientRecords';
 import CheckoutModal from './components/CheckoutModal';
 import Footer from './components/Footer';
 import { supabase } from './src/supabaseClient';
+import {
+  isDoctorConsultationPaymentConfigured,
+  isProfessionalConsultationPaymentConfigured,
+  recordVerifiedDoctorConsultation,
+  recordVerifiedProfessionalConsultation,
+} from './app/actions/consultation-payment';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
 import { FEATURES } from './src/features';
 import HealthArticles from './sections/HealthArticles';
@@ -57,7 +63,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isVideoCallActive, setIsVideoCallActive] = useState(false);
   const [videoCallParticipant, setVideoCallParticipant] = useState<VideoCallTarget | null>(null);
-  const [messageRecipient, setMessageRecipient] = useState<{ id: string; name: string; imageUrl: string } | null>(null);
+  const [messageRecipient, setMessageRecipient] = useState<{
+    id: string;
+    name: string;
+    imageUrl: string;
+    requiresConsultation?: boolean;
+  } | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [initialHospitalSelection, setInitialHospitalSelection] = useState<{hospitalId: string, referralId?: string} | null>(null);
   const [hospitalAppointments, setHospitalAppointments] = useState<any[]>([]);
@@ -257,7 +268,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     localStorage.removeItem('currentUser');
   };
 
-  const processPayment = async (amount: number, callback: (flw_data: any) => void, splitDetails?: { subaccountId: string, ratio?: number }) => {
+  const processPayment = async (
+    amount: number,
+    callback: (flw_data: any) => void | Promise<void>,
+    splitDetails?: { subaccountId: string, ratio?: number },
+    metadata?: Record<string, string>
+  ) => {
     // Check both potential environment variable names
     const fwPublicKey = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY || process.env.FLUTTERWAVE_PUBLIC_KEY;
     
@@ -282,6 +298,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     const paymentConfig: any = {
         public_key: fwPublicKey,
         tx_ref: `MDOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        meta: metadata,
         amount: amount,
         currency: "NGN",
         payment_options: "card, banktransfer, ussd",
@@ -294,13 +311,20 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
             description: "Payment for medical services",
             logo: `${typeof window !== 'undefined' ? window.location.origin : ''}/mobiledoclogo.jpeg`,
         },
-        callback: (data: any) => {
+        callback: async (data: any) => {
             console.log('App: Flutterwave callback received:', data);
-            if (data.status === 'successful' || data.status === 'completed' || data.charge_response_code === '00') {
-                callback(data);
-            } else {
-                console.warn('App: Payment status not successful:', data.status);
-                addNotification('Payment Unsuccessful', `Status: ${data.status}`, 'warning');
+            try {
+                if (data.status === 'successful' || data.status === 'completed' || data.charge_response_code === '00') {
+                    await callback(data);
+                } else {
+                    console.warn('App: Payment status not successful:', data.status);
+                    addNotification('Payment Unsuccessful', `Status: ${data.status}`, 'warning');
+                }
+            } catch (error) {
+                console.error('App: Payment confirmation could not be completed:', error);
+                addNotification('Payment confirmation pending', 'We could not finish confirming this payment. Please contact support before paying again.', 'error');
+            } finally {
+                setIsPaymentLoading(false);
             }
         },
         onclose: () => {
@@ -504,25 +528,33 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     switch (activeSection) {
       case 'Hospitals': return FEATURES.hospitals ? <Hospitals key={`hospitals-${activeSection}`} hospitals={hospitals || []} onScheduleService={handleScheduleHospitalService} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       case 'Doctors': return <Doctors key={`doctors-${activeSection}`} doctors={doctors || []} onBookAppointment={async (d) => {
-          // New: Trigger payment before booking
+          if (!await isProfessionalConsultationPaymentConfigured()) {
+              addNotification('Consultation payments unavailable', 'Secure consultation payment verification is not configured. Please contact support.', 'error');
+              return;
+          }
+
           const { data: docProfile } = await supabase.from('profiles').select('subaccount_id').eq('id', d.doctor.id).single();
           const subaccountId = docProfile?.subaccount_id;
           const splitRatio = dynamicCommissionRates?.doctor_share || 0.7;
 
           processPayment(COMMISSION_RATES.CONSULTATION_FEE, async (flw) => {
-              // 1. Record the payment
-              const { data: pay } = await supabase.from('payments').insert([{ 
-                  user_id: currentUser!.id, 
-                  amount: COMMISSION_RATES.CONSULTATION_FEE, 
-                  tx_ref: flw.tx_ref, 
-                  flw_ref: flw.flw_ref, 
-                  flw_id: flw.id || flw.transaction_id, // Capture internal FLW numeric ID
-                  payment_type: 'doctor_consultation', 
-                  status: 'successful',
-                  details: { doctor_id: d.doctor.id, doctor_name: d.doctor.name }
-              }]).select();
+              const { data: { session } } = await supabase.auth.getSession();
+              if (!session?.access_token) {
+                  addNotification('Payment not confirmed', 'Please sign in again so we can verify your consultation payment.', 'error');
+                  return;
+              }
 
-              // 2. Book the appointment
+              const paymentResult = await recordVerifiedProfessionalConsultation(
+                  session.access_token,
+                  String(flw.id || flw.transaction_id || ''),
+                  String(d.doctor.id),
+                  'doctor'
+              );
+              if (!paymentResult.success || !paymentResult.payment) {
+                  addNotification('Payment not confirmed', paymentResult.error || 'We could not verify your consultation payment.', 'error');
+                  return;
+              }
+
               const { error } = await supabase.from('appointments').insert([{ 
                   patient_id: currentUser!.id, 
                   doctor_id: d.doctor.id, 
@@ -531,18 +563,32 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                   type: d.type, 
                   reason_for_visit: d.reasonForVisit, 
                   status: 'Pending',
-                  payment_id: pay?.[0]?.id // Link payment to appointment if schema allows
+                  payment_id: paymentResult.payment.id
               }]);
 
               if (!error) { 
                   await fetchAppointments(); 
-                  setPaymentHistory(prev => [pay![0], ...prev]);
+                  setPaymentHistory(prev => [paymentResult.payment, ...prev]);
                   setActiveSection('Appointments'); 
                   addNotification('Success', 'Consultation booked and paid successfully', 'success');
+              } else {
+                  console.error('Paid consultation appointment could not be saved:', error);
+                  addNotification('Payment recorded, booking failed', 'Your payment is recorded, but the appointment could not be saved. Please contact support.', 'error');
               }
-          }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined);
+          }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined, {
+              payment_purpose: 'professional_consultation',
+              professional_id: String(d.doctor.id),
+              professional_name: d.doctor.name || 'Medical Professional',
+              professional_type: 'doctor',
+              doctor_id: String(d.doctor.id),
+          });
         }} onMessageProfessional={(professional) => {
-          setMessageRecipient({ id: String(professional.id), name: professional.name, imageUrl: professional.imageUrl });
+          setMessageRecipient({
+            id: String(professional.id),
+            name: professional.name,
+            imageUrl: professional.imageUrl,
+            requiresConsultation: professional.isBookable,
+          });
           setActiveSection('Messaging');
         }} />;
       case 'Labs': return FEATURES.labs ? <Labs key={`labs-${activeSection}`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;

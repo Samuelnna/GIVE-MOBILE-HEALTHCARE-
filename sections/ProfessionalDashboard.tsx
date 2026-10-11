@@ -74,17 +74,13 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
     const { data: candidatePayments } = await supabase
         .from('payments')
         .select('*, patient:profiles!payments_user_id_fkey(full_name)')
-        .eq('payment_type', 'doctor_consultation')
+        .in('payment_type', ['doctor_consultation', 'professional_consultation'])
         .in('status', ['successful', 'completed']);
 
     if (candidatePayments) {
         const enriched = candidatePayments.filter(p => {
-            // SECURE: Only show payments targeted to THIS doctor
-            // We check the JSON metadata (details) which is the source of truth for the recipient
-            const isTargetedToMe = p.details && (p.details as any).doctor_id === user.id;
-
-            // Optional fallback: If metadata is missing but it's a consultation from my known patient
-            // we check if they have an active/pending appointment to confirm the link
+            const details = (p.details as any) || {};
+            const isTargetedToMe = details.professional_id === user.id || details.doctor_id === user.id;
             const isMyAppointmentPatient = myPatientIds.includes(p.user_id);
 
             return isTargetedToMe || isMyAppointmentPatient;

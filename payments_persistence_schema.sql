@@ -11,8 +11,9 @@ CREATE TABLE IF NOT EXISTS public.payments (
   currency TEXT DEFAULT 'NGN',
   tx_ref TEXT UNIQUE NOT NULL,
   flw_ref TEXT,
+  flw_id TEXT,
   status TEXT DEFAULT 'pending', -- pending, successful, failed
-  payment_type TEXT NOT NULL, -- pharmacy_order, lab_test
+  payment_type TEXT NOT NULL, -- pharmacy_order, lab_test, doctor_consultation
   details JSONB, -- stores items bought or test scheduled
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -25,6 +26,9 @@ BEGIN
     ALTER TABLE public.profiles ADD COLUMN image_url TEXT;
   END IF;
 END $$;
+
+ALTER TABLE public.payments
+  ADD COLUMN IF NOT EXISTS flw_id TEXT;
 
 -- 2. Create Cart Items table for database persistence
 CREATE TABLE IF NOT EXISTS public.cart_items (
@@ -76,15 +80,15 @@ FOR SELECT USING (
 
 DROP POLICY IF EXISTS "Users can insert their own payments" ON public.payments;
 CREATE POLICY "Users can insert their own payments" ON public.payments 
-FOR INSERT WITH CHECK (true);
+FOR INSERT WITH CHECK (auth.uid() = user_id AND payment_type <> 'doctor_consultation');
 
 DROP POLICY IF EXISTS "Users can update their own payments" ON public.payments;
 CREATE POLICY "Users can update their own payments" ON public.payments 
-FOR UPDATE USING (true);
+FOR UPDATE USING (auth.uid() = user_id AND payment_type <> 'doctor_consultation')
+WITH CHECK (auth.uid() = user_id AND payment_type <> 'doctor_consultation');
 
 -- 5. Policies for Cart Items
 DROP POLICY IF EXISTS "Users can manage their own cart items" ON public.cart_items;
 CREATE POLICY "Users can manage their own cart items" ON public.cart_items
 FOR ALL USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
-

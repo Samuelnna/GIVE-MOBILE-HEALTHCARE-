@@ -82,8 +82,8 @@ export function mapDoctor(p: any): Doctor {
     imageUrl: p.image_url || verification?.selfie_url || p.selfie_url || '',
     bio: p.ai_description || 'Verified MobileDoc Healthcare Professional',
     professionType,
-    isBookable: professionType === 'Doctor',
-    consultationTypes: professionType === 'Doctor' ? ['Video Call', 'Messaging'] : ['Messaging'],
+    isBookable: true,
+    consultationTypes: ['Video Call', 'Messaging'],
     subaccount_id: p.subaccount_id,
   } as Doctor;
 }
@@ -320,7 +320,7 @@ export async function loadProfessionalPractice(doctorId: string) {
       supabase
         .from('payments')
         .select('*, patient:profiles!payments_user_id_fkey(full_name)')
-        .eq('payment_type', 'doctor_consultation')
+        .in('payment_type', ['doctor_consultation', 'professional_consultation'])
         .in('status', ['successful', 'completed']),
       [] as any[]
     ),
@@ -337,7 +337,8 @@ export async function loadProfessionalPractice(doctorId: string) {
 
   const myPatientIds = (appts || []).map((a: any) => a.patient_id);
   const mine = (payments || []).filter((p: any) => {
-    const targeted = p.details && p.details.doctor_id === doctorId;
+    const details = p.details || {};
+    const targeted = details.professional_id === doctorId || details.doctor_id === doctorId;
     const knownPatient = myPatientIds.includes(p.user_id);
     return targeted || knownPatient;
   }).map((p: any) => ({
