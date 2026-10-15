@@ -15,8 +15,9 @@ ALTER TABLE public.hospitals ADD COLUMN IF NOT EXISTS bank_details JSONB;
 ALTER TABLE public.pharmacies ADD COLUMN IF NOT EXISTS subaccount_id TEXT;
 ALTER TABLE public.pharmacies ADD COLUMN IF NOT EXISTS bank_details JSONB;
 
--- Add flw_id to payments table for internal Flutterwave numeric ID
-ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS flw_id BIGINT;
+-- Flutterwave transaction IDs can exceed the range of BIGINT; preserve them as text.
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS flw_id TEXT;
+ALTER TABLE public.payments ALTER COLUMN flw_id TYPE TEXT USING flw_id::TEXT;
 
 -- Add payment_id to hospital_appointments for Admin tracking
 ALTER TABLE public.hospital_appointments ADD COLUMN IF NOT EXISTS payment_id UUID REFERENCES public.payments(id) ON DELETE SET NULL;

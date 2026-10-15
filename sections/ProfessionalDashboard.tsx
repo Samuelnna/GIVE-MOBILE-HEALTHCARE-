@@ -8,7 +8,7 @@ import PrescribeModal from '../components/PrescribeModal';
 import { useNotification } from '../contexts/NotificationContext';
 import { FEATURES } from '../src/features';
 
-const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; setActiveSection: (s: any) => void; onLogout: () => void }> = ({ user, appointments, setActiveSection, onLogout }) => {
+const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; setActiveSection: (s: any) => void; onLogout: () => void; onMessagePatient: (patient: { id: string; name: string }) => void }> = ({ user, appointments, setActiveSection, onLogout, onMessagePatient }) => {
   const seedAppts = (appointments || []).map((a: any) => ({
     ...a,
     patient_id: a.patient?.id || a.patient_id,
@@ -68,7 +68,7 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
         .select('*, patient:profiles!appointments_patient_id_fkey(full_name)')
         .eq('doctor_id', user.id);
 
-    const myPatientIds = myAppts?.map(a => a.patient_id) || [];
+    const myPaymentIds = new Set((myAppts || []).map(a => a.payment_id).filter(Boolean));
 
     // 2. Fetch all successful consultation payments
     const { data: candidatePayments } = await supabase
@@ -81,9 +81,7 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
         const enriched = candidatePayments.filter(p => {
             const details = (p.details as any) || {};
             const isTargetedToMe = details.professional_id === user.id || details.doctor_id === user.id;
-            const isMyAppointmentPatient = myPatientIds.includes(p.user_id);
-
-            return isTargetedToMe || isMyAppointmentPatient;
+            return isTargetedToMe || myPaymentIds.has(p.id);
         }).map(p => {
             // Robust name resolution
             const patientName = p.patient?.full_name || 
@@ -161,8 +159,13 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
   }, [user?.id]);
 
   const updateStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
-    if (!error) fetchAppts();
+    const { data, error } = await supabase.from('appointments').update({ status }).eq('id', id).eq('doctor_id', user.id).select('id');
+    if (error || !data?.length) {
+      addNotification('Booking update failed', error?.message || 'You do not have permission to update this appointment.', 'error');
+      return;
+    }
+    await fetchAppts();
+    addNotification('Booking updated', status === 'Upcoming' ? 'Booking accepted. You can now open the patient chat.' : `Appointment marked ${status.toLowerCase()}.`, 'success');
   };
 
   const handleRefer = async (details: { referredDoctorId: string; reason: string }) => {
@@ -407,6 +410,7 @@ const ProfessionalDashboard: React.FC<{ user: any; appointments: Appointment[]; 
                                     )}
                                     {appt.status === 'Upcoming' && (
                                         <>
+                                            <button onClick={() => onMessagePatient({ id: appt.patient_id, name: appt.patient?.full_name || 'Patient' })} className="px-3 py-1 bg-sky-50 text-sky-700 text-xs font-bold rounded-lg">Chat</button>
                                             <button onClick={() => updateStatus(appt.id, 'Completed')} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded" title="Mark Completed"><CheckCircleIcon className="w-5 h-5"/></button>
                                             {FEATURES.doctorReferrals && <button
                                                 onClick={() => setReferringPatient({ id: appt.patient_id, name: appt.patient?.full_name })} 

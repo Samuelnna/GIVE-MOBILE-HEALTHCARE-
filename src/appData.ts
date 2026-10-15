@@ -82,7 +82,7 @@ export function mapDoctor(p: any): Doctor {
     imageUrl: p.image_url || verification?.selfie_url || p.selfie_url || '',
     bio: p.ai_description || 'Verified MobileDoc Healthcare Professional',
     professionType,
-    isBookable: true,
+    isBookable: p.status === 'active',
     consultationTypes: ['Video Call', 'Messaging'],
     subaccount_id: p.subaccount_id,
   } as Doctor;
@@ -335,12 +335,11 @@ export async function loadProfessionalPractice(doctorId: string) {
     ),
   ]);
 
-  const myPatientIds = (appts || []).map((a: any) => a.patient_id);
+  const myPaymentIds = new Set((appts || []).map((a: any) => a.payment_id).filter(Boolean));
   const mine = (payments || []).filter((p: any) => {
     const details = p.details || {};
     const targeted = details.professional_id === doctorId || details.doctor_id === doctorId;
-    const knownPatient = myPatientIds.includes(p.user_id);
-    return targeted || knownPatient;
+    return targeted || myPaymentIds.has(p.id);
   }).map((p: any) => ({
     ...p,
     display_patient_name:

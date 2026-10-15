@@ -26,7 +26,9 @@ import Footer from './components/Footer';
 import { supabase } from './src/supabaseClient';
 import {
   getProfessionalConsultationPaymentConfiguration,
-  recordVerifiedProfessionalConsultation,
+  getCheckoutPublicKey,
+  prepareConsultationPayment,
+  confirmConsultationPayment,
 } from './app/actions/consultation-payment';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
 import { FEATURES } from './src/features';
@@ -260,6 +262,19 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
       localStorage.setItem('currentUser', JSON.stringify(user));
   };
 
+  const persistSuccessfulPayment = async (payment: Record<string, unknown>) => {
+      const { data, error } = await supabase.from('payments').insert([payment]).select('*').single();
+      if (error) {
+          console.error('App: Payment record insert failed:', error);
+          throw new Error(`Payment record could not be saved: ${error.message}`);
+      }
+      if (!data) {
+          throw new Error('Payment record insert returned no saved payment.');
+      }
+      setPaymentHistory(prev => [data, ...prev]);
+      return data;
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setCurrentUser(null);
@@ -270,18 +285,17 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     amount: number,
     callback: (flw_data: any) => void | Promise<void>,
     splitDetails?: { subaccountId: string, ratio?: number },
-    metadata?: Record<string, string>
+    metadata?: Record<string, string>,
+    preparedReference?: string
   ) => {
-    // Check both potential environment variable names
-    const fwPublicKey = process.env.NEXT_PUBLIC_FLUTTERWAVE_PUBLIC_KEY || process.env.FLUTTERWAVE_PUBLIC_KEY;
-    
-    console.log('App: Initializing Flutterwave with key:', fwPublicKey ? `${fwPublicKey.substring(0, 10)}...` : 'MISSING');
-    
-    // @ts-ignore
-    if (!fwPublicKey) { 
-        alert('Payment configuration missing. Please check your .env file.'); 
-        console.error('Flutterwave Public Key is missing in environment variables.');
-        return; 
+    let fwPublicKey: string;
+    try {
+        const configuration = await getCheckoutPublicKey();
+        if (!configuration.success || !configuration.publicKey) throw new Error(configuration.error || 'Checkout public key is missing.');
+        fwPublicKey = configuration.publicKey;
+    } catch (error) {
+        addNotification('Checkout unavailable', error instanceof Error ? error.message : 'Could not load checkout configuration.', 'error');
+        return;
     }
     
     // @ts-ignore
@@ -293,9 +307,10 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
 
     setIsPaymentLoading(true);
 
+    const txRef = preparedReference || `MDOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
     const paymentConfig: any = {
         public_key: fwPublicKey,
-        tx_ref: `MDOC-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        tx_ref: txRef,
         meta: metadata,
         amount: amount,
         currency: "NGN",
@@ -313,14 +328,14 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
             console.log('App: Flutterwave callback received:', data);
             try {
                 if (data.status === 'successful' || data.status === 'completed' || data.charge_response_code === '00') {
-                    await callback(data);
+                    await callback({ ...data, tx_ref: data.tx_ref || txRef });
                 } else {
                     console.warn('App: Payment status not successful:', data.status);
                     addNotification('Payment Unsuccessful', `Status: ${data.status}`, 'warning');
                 }
             } catch (error) {
                 console.error('App: Payment confirmation could not be completed:', error);
-                addNotification('Payment confirmation pending', 'We could not finish confirming this payment. Please contact support before paying again.', 'error');
+                addNotification('Payment confirmation pending', `We could not finish confirming this payment. Please contact support before paying again. Reference: ${txRef}`, 'error');
             } finally {
                 setIsPaymentLoading(false);
             }
@@ -372,7 +387,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const COMMISSION_RATES = {
       LAB_PROVIDER_SHARE: 0.8, // 80% goes to the Lab, 20% to the platform
       DOCTOR_PROVIDER_SHARE: 0.7, // 70% goes to the Doctor, 30% to the platform
-      CONSULTATION_FEE: 1000, // Standard fee for doctor consultation
+      CONSULTATION_FEE: 100, // Temporary consultation fee while payment persistence is investigated
   };
 
   const handleScheduleLabTest = async (details: any) => {
@@ -386,12 +401,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
       const splitRatio = dynamicCommissionRates?.lab_share || COMMISSION_RATES.LAB_PROVIDER_SHARE;
 
       processPayment(details.test.price, async (flw) => {
-        const { data: pay } = await supabase.from('payments').insert([{ 
+        const pay = await persistSuccessfulPayment({ 
             user_id: currentUser.id, 
             amount: details.test.price, 
             tx_ref: flw.tx_ref, 
             flw_ref: flw.flw_ref, 
-            flw_id: flw.id || flw.transaction_id, // Capture internal FLW numeric ID
+            flw_id: String(flw.transaction_id || flw.id || ''),
             payment_type: 'lab_test', 
             status: 'successful',
             details: { 
@@ -400,9 +415,14 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                 test_name: details.test.name,
                 patient_name: currentUser.name 
             }
-        }]).select();
-        const { error } = await supabase.from('lab_appointments').insert([{ patient_id: currentUser.id, lab_test_id: details.test.id, lab_id: details.test.labId, payment_id: pay?.[0]?.id, payment_status: 'paid', date: details.date, time: details.time, location: details.location }]);
-        if (!error) { setPaymentHistory(prev => [pay![0], ...prev]); setActiveSection('Patient Records'); }
+        });
+        const { error } = await supabase.from('lab_appointments').insert([{ patient_id: currentUser.id, lab_test_id: details.test.id, lab_id: details.test.labId, payment_id: pay.id, payment_status: 'paid', date: details.date, time: details.time, location: details.location }]);
+        if (!error) {
+            setActiveSection('Patient Records');
+        } else {
+            console.error('App: Lab appointment save error after payment:', error);
+            addNotification('Payment recorded; booking issue', `Your payment was recorded, but we couldn't save the lab appointment: ${error.message}. Reference: ${flw.tx_ref}`, 'error');
+        }
     }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined);
   };
 
@@ -413,6 +433,10 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
       // 1. Identify the pharmacy from the items (assuming items belong to one pharmacy for simplicity)
       // If items are from multiple pharmacies, a more complex split logic would be needed.
       const pharmacyId = (cartItems[0] as any).pharmacy_id;
+      if (cartItems.some(item => (item as any).pharmacy_id !== pharmacyId)) {
+          addNotification('Separate pharmacy orders required', 'Please order medicines from one pharmacy at a time so payment and fulfilment reach the correct pharmacy.', 'warning');
+          return;
+      }
       let subaccountId = null;
       if (pharmacyId) {
           const { data } = await supabase.from('pharmacies').select('subaccount_id').eq('id', pharmacyId).single();
@@ -422,12 +446,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
       const splitRatio = dynamicCommissionRates?.pharmacy_share || 0.9;
 
       processPayment(total, async (flw) => {
-        await supabase.from('payments').insert([{ 
+        await persistSuccessfulPayment({ 
             user_id: currentUser.id, 
             amount: total, 
             tx_ref: flw.tx_ref, 
             flw_ref: flw.flw_ref, 
-            flw_id: flw.id || flw.transaction_id,
+            flw_id: String(flw.transaction_id || flw.id || ''),
             payment_type: 'pharmacy_order', 
             status: 'successful',
             details: { 
@@ -439,7 +463,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                 delivery_phone: details.deliveryPhone || null,
                 pickup_location: details.pickupLocation || null,
             }
-        }]);
+        });
         const { data: orderRow, error } = await supabase.from('pharmacy_orders').insert([{ 
             patient_id: currentUser.id, 
             total_amount: total, 
@@ -458,14 +482,23 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                 quantity: item.quantity,
                 price_at_time: item.price,
             }));
-            await supabase.from('pharmacy_order_items').insert(items);
-            await supabase.from('cart_items').delete().eq('user_id', currentUser.id);
+            const { error: itemsError } = await supabase.from('pharmacy_order_items').insert(items);
+            if (itemsError) {
+                addNotification('Payment recorded; order incomplete', `Your payment and order were saved, but the medicines could not be attached. Contact support with order ${orderRow.id} and reference ${flw.tx_ref}. Do not pay again.`, 'error');
+                setIsCheckoutOpen(false);
+                setActiveSection('Patient Records');
+                return;
+            }
+            const { error: cartError } = await supabase.from('cart_items').delete().eq('user_id', currentUser.id);
+            if (cartError) addNotification('Cart cleanup pending', 'Your order is saved, but the cart could not be cleared. Do not purchase these items again.', 'warning');
             setCartItems([]);
             setIsCheckoutOpen(false);
             setActiveSection('Patient Records');
             addNotification('Order placed', 'Your pharmacy order and delivery details were saved.', 'success');
         } else if (error) {
-            addNotification('Order save issue', error.message, 'error');
+            console.error('App: Pharmacy order save error after payment:', error);
+            setActiveSection('Patient Records');
+            addNotification('Payment recorded; order issue', `Your payment was recorded, but the order could not be saved: ${error.message}. Reference: ${flw.tx_ref}`, 'error');
         }
     }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined);
   };
@@ -483,12 +516,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
 
     processPayment(servicePrice, async (flw) => {
         // 1. Record payment in history
-        const { data: pay } = await supabase.from('payments').insert([{ 
+        const pay = await persistSuccessfulPayment({ 
             user_id: currentUser.id, 
             amount: servicePrice, 
             tx_ref: flw.tx_ref, 
             flw_ref: flw.flw_ref, 
-            flw_id: flw.id || flw.transaction_id, // Capture internal FLW numeric ID
+            flw_id: String(flw.transaction_id || flw.id || ''),
             payment_type: 'hospital_appointment', 
             status: 'successful',
             details: { 
@@ -496,7 +529,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
                 service_name: details.service.name,
                 patient_name: currentUser!.name 
             }
-        }]).select();
+        });
 
         // 2. Create the appointment
         const { error } = await supabase.from('hospital_appointments').insert([{ 
@@ -506,12 +539,11 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
             date: details.date, 
             time: details.time, 
             status: 'Upcoming',
-            payment_id: pay?.[0]?.id // Link payment to appointment for Admin visibility
+            payment_id: pay.id // Link payment to appointment for Admin visibility
         }]);
 
         if (!error) { 
             console.log('App: Hospital appointment saved successfully');
-            if (pay) setPaymentHistory(prev => [pay[0], ...prev]);
             setActiveSection('Appointments'); 
             addNotification('Success', 'Hospital appointment scheduled and paid', 'success');
         } else {
@@ -540,21 +572,45 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
           const subaccountId = docProfile?.subaccount_id;
           const splitRatio = dynamicCommissionRates?.doctor_share || 0.7;
 
+          const { data: { session: checkoutSession } } = await supabase.auth.getSession();
+          if (!checkoutSession) {
+              addNotification('Sign in required', 'Please sign in before starting checkout.', 'error');
+              return;
+          }
+          const prepared = await prepareConsultationPayment(checkoutSession.access_token, String(d.doctor.id));
+          if (!prepared.success || !prepared.payment) {
+              addNotification('Checkout unavailable', prepared.error || 'Could not save the pending payment.', 'error');
+              return;
+          }
+          setPaymentHistory(prev => [prepared.payment, ...prev]);
+
           processPayment(COMMISSION_RATES.CONSULTATION_FEE, async (flw) => {
               const { data: { session } } = await supabase.auth.getSession();
               if (!session?.access_token) {
-                  addNotification('Payment not confirmed', 'Please sign in again so we can verify your consultation payment.', 'error');
+                  addNotification('Payment not confirmed', `Please sign in again so we can verify your consultation payment. Reference: ${flw.tx_ref}`, 'error');
                   return;
               }
 
-              const paymentResult = await recordVerifiedProfessionalConsultation(
+              const paymentResult = await confirmConsultationPayment(
                   session.access_token,
-                  String(flw.id || flw.transaction_id || ''),
-                  String(d.doctor.id),
-                  'doctor'
+                  prepared.payment.tx_ref,
+                  String(flw.transaction_id || flw.id || '')
               );
               if (!paymentResult.success || !paymentResult.payment) {
-                  addNotification('Payment not confirmed', paymentResult.error || 'We could not verify your consultation payment.', 'error');
+                  addNotification('Payment not confirmed', `${paymentResult.error || 'We could not verify your consultation payment.'} Reference: ${flw.tx_ref}. Please contact support before paying again.`, 'error');
+                  return;
+              }
+
+              setPaymentHistory(prev => [paymentResult.payment, ...prev.filter(payment => payment.id !== paymentResult.payment.id)]);
+
+              const { data: provider } = await supabase.from('profiles').select('status').eq('id', d.doctor.id).single();
+              if (provider?.status !== 'active') {
+                  setActiveSection('Patient Records');
+                  addNotification(
+                      'Payment recorded; provider unavailable',
+                      `Your successful payment is saved in My Records, but this professional is not currently accepting bookings. Contact support to arrange the consultation or a refund. Reference: ${flw.tx_ref}`,
+                      'error'
+                  );
                   return;
               }
 
@@ -571,12 +627,11 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
 
               if (!error) { 
                   await fetchAppointments(); 
-                  setPaymentHistory(prev => [paymentResult.payment, ...prev]);
                   setActiveSection('Appointments'); 
                   addNotification('Success', 'Consultation booked and paid successfully', 'success');
               } else {
                   console.error('Paid consultation appointment could not be saved:', error);
-                  addNotification('Payment recorded, booking failed', 'Your payment is recorded, but the appointment could not be saved. Please contact support.', 'error');
+                  addNotification('Payment recorded, booking failed', `Your payment is recorded, but the appointment could not be saved. Please contact support before paying again. Reference: ${flw.tx_ref}`, 'error');
               }
           }, subaccountId ? { subaccountId, ratio: splitRatio } : undefined, {
               payment_purpose: 'professional_consultation',
@@ -584,7 +639,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
               professional_name: d.doctor.name || 'Medical Professional',
               professional_type: 'doctor',
               doctor_id: String(d.doctor.id),
-          });
+          }, prepared.payment.tx_ref);
         }} onMessageProfessional={(professional) => {
           setMessageRecipient({
             id: String(professional.id),
@@ -627,7 +682,10 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
         <div className="max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8">
           {currentUser.userType === 'admin' ? <AdminDashboard allPayments={allPayments} /> : 
            (currentUser.userType === 'professional' && activeSection === 'Dashboard' ? 
-            <ProfessionalDashboard user={currentUser} appointments={appointments} setActiveSection={setActiveSection} onLogout={handleLogout} /> : 
+            <ProfessionalDashboard user={currentUser} appointments={appointments} setActiveSection={setActiveSection} onLogout={handleLogout} onMessagePatient={patient => {
+              setMessageRecipient({ id: patient.id, name: patient.name, imageUrl: '', requiresConsultation: false });
+              setActiveSection('Messaging');
+            }} /> : 
             renderSection())}
         </div>
       </main>

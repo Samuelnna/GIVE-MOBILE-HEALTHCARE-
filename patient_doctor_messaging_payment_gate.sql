@@ -72,6 +72,8 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payments
   ADD COLUMN IF NOT EXISTS flw_id TEXT;
+ALTER TABLE public.payments
+  ALTER COLUMN flw_id TYPE TEXT USING flw_id::TEXT;
 
 DROP POLICY IF EXISTS "Users can view their own messages" ON public.messages;
 DROP POLICY IF EXISTS "Users can send messages" ON public.messages;

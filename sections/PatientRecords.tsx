@@ -5,6 +5,7 @@ import { TriageReport, VirtualCard, Order, Doctor, Hospital, LabTest, Medication
 import { CheckCircleIcon, DocumentTextIcon, CalendarIcon, ShoppingCartIcon, HospitalIcon, BellIcon } from '../components/IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
 import { FEATURES } from '../src/features';
+import { confirmConsultationPayment } from '../app/actions/consultation-payment';
 
 interface PatientRecordsProps {
     user: any;
@@ -33,6 +34,22 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
   const [referrals, setReferrals] = useState<any[]>([]);
   const [prescriptions, setPrescriptions] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
+  const [paymentLoadError, setPaymentLoadError] = useState<string | null>(null);
+  const [confirmingPayment, setConfirmingPayment] = useState<string | null>(null);
+
+  const retryConfirmation = async (reference: string) => {
+    setConfirmingPayment(reference);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Please sign in again.');
+      const result = await confirmConsultationPayment(session.access_token, reference);
+      if (!result.success) throw new Error(result.error);
+      await fetchData();
+      addNotification('Payment confirmed', 'Your consultation payment is saved. If you have no appointment, contact support to arrange it.', 'success');
+    } catch (error) {
+      addNotification('Confirmation pending', error instanceof Error ? error.message : 'Please retry confirmation later.', 'warning');
+    } finally { setConfirmingPayment(null); }
+  };
 
     const handleEnableReminder = async (prescription: any) => {
         try {
@@ -86,8 +103,14 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
           setPrescriptions(presData);
       }
 
-      const { data: payData } = await supabase.from('payments').select('*').eq('user_id', authUserId).order('created_at', { ascending: false });
-      if (payData) setPayments(payData);
+      const { data: payData, error: paymentError } = await supabase.from('payments').select('*').eq('user_id', authUserId).order('created_at', { ascending: false });
+      if (paymentError) {
+          console.error('PatientRecords: Payment fetch error:', paymentError);
+          setPaymentLoadError(paymentError.message);
+      } else {
+          setPayments(payData || []);
+          setPaymentLoadError(null);
+      }
   };
 
   useEffect(() => {
@@ -303,7 +326,8 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
 
             {activeTab === 'payments' && (
                 <div className="space-y-4">
-                    {payments.length === 0 && <p className="text-center py-12 text-slate-400">No payment history found.</p>}
+                    {paymentLoadError && <p className="text-center py-4 text-red-600">Payment history could not be loaded: {paymentLoadError}</p>}
+                    {!paymentLoadError && payments.length === 0 && <p className="text-center py-12 text-slate-400">No payment history found.</p>}
                     {payments.map(pay => (
                         <div key={pay.id} className="p-4 rounded-xl border border-slate-100 flex items-center justify-between bg-white shadow-sm">
                             <div className="flex items-center gap-4">
@@ -319,6 +343,11 @@ const PatientRecords: React.FC<PatientRecordsProps> = ({ user, setActiveSection,
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${pay.status === 'successful' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                 {pay.status}
                             </span>
+                            {pay.status === 'pending' && pay.details?.checkout_version === 2 && (
+                                <button disabled={confirmingPayment !== null} onClick={() => retryConfirmation(pay.tx_ref)} className="px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-xs font-bold disabled:opacity-50">
+                                    {confirmingPayment === pay.tx_ref ? 'Confirming…' : 'Check payment'}
+                                </button>
+                            )}
                         </div>
                     ))}
                 </div>

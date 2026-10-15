@@ -30,6 +30,9 @@ END $$;
 ALTER TABLE public.payments
   ADD COLUMN IF NOT EXISTS flw_id TEXT;
 
+ALTER TABLE public.payments
+  ALTER COLUMN flw_id TYPE TEXT USING flw_id::TEXT;
+
 -- 2. Create Cart Items table for database persistence
 CREATE TABLE IF NOT EXISTS public.cart_items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

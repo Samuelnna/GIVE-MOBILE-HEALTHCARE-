@@ -46,6 +46,7 @@ const Messaging: React.FC<{
   const [messages, setMessages] = useState<any[]>([]);
   const [inputText, setInputText] = useState('');
   const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [contactLoadError, setContactLoadError] = useState('');
   const [showUserList, setShowUserList] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -62,12 +63,16 @@ const Messaging: React.FC<{
     const userId = await getAuthedUserId();
         if (!userId) return [] as Convo[];
 
-    const { data } = await supabase
+    const { data, error } = await supabase
         .from('messages')
-        .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url, user_type, role, specialty), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url, user_type, role, specialty)')
+        .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url, user_type, role), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url, user_type, role)')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
     
+    if (error) {
+        setContactLoadError(`Conversations could not be loaded: ${error.message}`);
+        return [] as Convo[];
+    }
     if (data) {
         const groups: Record<string, Convo> = {};
         data.forEach(m => {
@@ -109,8 +114,9 @@ const Messaging: React.FC<{
     const fetchProfiles = async () => {
         const userId = await getAuthedUserId();
         if (!userId) return;
-        const { data } = await supabase.from('profiles').select('id, full_name, user_type, image_url, role, specialty').neq('id', userId);
-        if (data) setAllProfiles(data);
+        const { data, error } = await supabase.from('profiles').select('id, full_name, user_type, image_url, role').neq('id', userId);
+        if (error) setContactLoadError(`Contacts could not be loaded: ${error.message}`);
+        else if (data) { setAllProfiles(data); setContactLoadError(''); }
     };
     fetchProfiles();
     const channel = supabase.channel(`msgs_${Math.random().toString(36).substring(7)}`)
@@ -196,51 +202,38 @@ const Messaging: React.FC<{
           return;
       }
 
-      const { data: userProfile, error: profileError } = await supabase
-          .from('profiles')
-          .select('user_type')
-          .eq('id', userId)
-          .single();
+      const { data: allowed, error: profileError } = await supabase.rpc('can_message_participants', {
+          message_sender: userId,
+          message_receiver: conversation.id,
+      });
 
       if (profileError) {
           console.error('Could not verify messaging access:', profileError);
-          setAccessError('We could not verify your account. Please try again.');
-          addNotification('Messaging unavailable', 'We could not verify your account. Please try again.', 'error');
+          setAccessError(`We could not verify messaging access: ${profileError.message}`);
+          addNotification('Messaging unavailable', `We could not verify messaging access: ${profileError.message}`, 'error');
           setIsCheckingAccess(false);
           return;
       }
 
-      if (userProfile.user_type !== 'patient' || !conversation.participant.requiresConsultation) {
-          setIsGated(false);
-          setIsCheckingAccess(false);
-          return;
-      }
-
-      const { data: payments, error: paymentError } = await supabase
-          .from('payments')
-          .select('details, payment_type')
-          .eq('user_id', userId)
-          .in('payment_type', ['doctor_consultation', 'professional_consultation'])
-          .in('status', ['successful', 'completed']);
-
-      if (paymentError) {
-          console.error('Could not verify consultation payment:', paymentError);
-          setAccessError('We could not verify your consultation payment. Please try again.');
-          addNotification('Messaging unavailable', 'We could not verify your consultation payment. Please try again.', 'error');
-          setIsCheckingAccess(false);
-          return;
-      }
-
-      const hasPaidThisProfessional = (payments || []).some((payment) => {
-          const details = payment.details || {};
-          return String(details.professional_id || details.doctor_id) === conversation.id;
-      });
-      setIsGated(!hasPaidThisProfessional);
+      setIsGated(allowed !== true);
       setIsCheckingAccess(false);
   };
 
+  useEffect(() => {
+    if (!selectedConvo) return;
+    const recheck = () => { void openConversation(selectedConvo); };
+    const channel = supabase.channel(`chat_payment_access_${selectedConvo.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, recheck)
+      .subscribe();
+    window.addEventListener('focus', recheck);
+    return () => {
+      void supabase.removeChannel(channel);
+      window.removeEventListener('focus', recheck);
+    };
+  }, [selectedConvo?.id]);
+
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !selectedConvo) return;
+    if (!inputText.trim() || !selectedConvo || isGated || isCheckingAccess || accessError) return;
     const userId = await getAuthedUserId();
     if (!userId) return;
 
@@ -255,7 +248,9 @@ const Messaging: React.FC<{
         fetchConversations();
     } else {
         console.error('Message could not be sent:', error);
-        addNotification('Message not sent', 'You need a successful consultation with this professional before messaging them.', 'error');
+        addNotification('Message not sent', error.code === '42501'
+          ? 'Messaging permission was denied. A successful consultation payment for this professional is required.'
+          : `Your message could not be saved: ${error.message}`, 'error');
     }
   };
 
@@ -269,6 +264,7 @@ const Messaging: React.FC<{
         </div>
         
         <div className="flex-1 overflow-y-auto bg-white">
+            {contactLoadError && <p className="p-4 text-sm text-red-600">{contactLoadError}</p>}
             {conversations.length === 0 && (
                 <div className="p-8 text-center">
                     <p className="text-slate-400 font-bold text-sm">No active chats.</p>
@@ -315,6 +311,8 @@ const Messaging: React.FC<{
                         <h2 className="text-lg font-black text-slate-800 tracking-tight">New Message</h2>
                     </header>
                     <div className="flex-1 overflow-y-auto">
+                        {contactLoadError && <p className="p-4 text-sm text-red-600">{contactLoadError}</p>}
+                        {!contactLoadError && allProfiles.length === 0 && <p className="p-4 text-sm text-slate-500">No contacts are available. Try opening Message from the professional you paid for.</p>}
                         {allProfiles.map(p => (
                             <div key={p.id} onClick={() => startNewConversation(p)} className="p-4 hover:bg-slate-50 cursor-pointer border-b border-slate-50 flex items-center gap-4 transition-colors">
                                 <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-500 font-black text-xs">
@@ -335,6 +333,7 @@ const Messaging: React.FC<{
                 {selectedConvo ? (
                     isGated ? (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+                            <button onClick={() => setSelectedConvo(null)} className="mb-4 text-sky-700 font-bold text-sm">Back to contacts</button>
                             <div className="w-20 h-20 bg-white rounded-3xl shadow-xl flex items-center justify-center mb-6 border border-slate-100">
                                 <CreditCardIcon className="h-10 w-10 text-slate-300" />
                             </div>

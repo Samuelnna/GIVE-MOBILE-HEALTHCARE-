@@ -4,6 +4,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import { Cog6ToothIcon, ChartBarIcon } from '../components/IconComponents';
 import { flwService } from '../services/flutterwave';
 import { createSubaccountAction, verifyTransactionAction } from '../app/actions/subaccount';
+import { getAdminPayments } from '../app/actions/admin-payments';
 
 interface EntityModalProps {
   title: string;
@@ -102,6 +103,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   const [verifications, setVerifications] = useState<any[]>([]);
     const [approvedVerifications, setApprovedVerifications] = useState<any[]>([]);
   const [dbPayments, setDbPayments] = useState<any[]>([]);
+    const [paymentLoadError, setPaymentLoadError] = useState<string | null>(null);
   const [platformSettings, setPlatformSettings] = useState<any>(null);
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [hospitals, setHospitals] = useState<any[]>([]);
@@ -165,12 +167,15 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
     const payChannel = supabase.channel('admin_payments_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchPayments)
         .subscribe();
+    const refreshPaymentsOnFocus = () => { void fetchPayments(); };
+    window.addEventListener('focus', refreshPaymentsOnFocus);
 
     const hospApptChannel = supabase.channel('admin_hosp_appts_realtime')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'hospital_appointments' }, fetchHospAppts)
         .subscribe();
     
     return () => { 
+        window.removeEventListener('focus', refreshPaymentsOnFocus);
         supabase.removeChannel(payChannel); 
         supabase.removeChannel(hospApptChannel);
     };
@@ -205,22 +210,16 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   };
 
   const fetchPayments = async () => {
-    console.log('AdminDashboard: Fetching all payments...');
-    const { data, error } = await supabase
-        .from('payments')
-        .select(`
-            *,
-            profiles!payments_user_id_fkey(full_name)
-        `)
-        .order('created_at', { ascending: false });
-    
-    if (error) {
-        console.error('AdminDashboard: Payment fetch error:', error);
-        // Try simpler fetch if join fails
-        const { data: simpleData } = await supabase.from('payments').select('*').order('created_at', { ascending: false });
-        if (simpleData) setDbPayments(simpleData);
-    } else if (data) {
-        setDbPayments(data);
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Please sign in to the admin account again.');
+        const result = await getAdminPayments(session.access_token);
+        if (!result.success) throw new Error(result.error);
+        setDbPayments(result.payments || []);
+        setPaymentLoadError(null);
+    } catch (error) {
+        setDbPayments([]);
+        setPaymentLoadError(error instanceof Error ? error.message : 'Could not load payments.');
     }
   };
 
@@ -1172,6 +1171,8 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         {/* Payment History Tracking */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Financial Transactions (Payments)</h3>
+            <button onClick={() => void fetchPayments()} className="mb-4 px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-sm font-bold">Refresh payments</button>
+            {paymentLoadError && <p className="text-center py-4 text-red-600">Payment records could not be loaded: {paymentLoadError}</p>}
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                     <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">User</th><th className="pb-2">Amount</th><th className="pb-2">Type</th><th className="pb-2">Reference</th><th className="pb-2">Split</th><th className="pb-2">Status</th></tr></thead>
@@ -1203,7 +1204,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                         ))}
                     </tbody>
                 </table>
-                {displayPayments.length === 0 && <p className="text-center py-4 text-slate-500 italic">No payments recorded yet.</p>}
+                {!paymentLoadError && displayPayments.length === 0 && <p className="text-center py-4 text-slate-500 italic">No payments recorded yet.</p>}
             </div>
         </div>
 

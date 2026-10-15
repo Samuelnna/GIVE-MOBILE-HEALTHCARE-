@@ -53,7 +53,9 @@ const DoctorCard: React.FC<DoctorCardProps> = ({ doctor, onBookAppointment, onMe
             ))}
           </div>
         </div>
-        <button onClick={onBookAppointment} className="w-full mt-2 py-3 bg-sky-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-100 active:scale-95">Book Consultation</button>
+        <button onClick={onBookAppointment} disabled={doctor.isBookable === false} className="w-full mt-2 py-3 bg-sky-600 text-white font-black uppercase tracking-widest text-[10px] rounded-xl hover:bg-sky-700 transition-all shadow-lg shadow-sky-100 active:scale-95 disabled:bg-slate-400 disabled:shadow-none disabled:cursor-not-allowed">
+          {doctor.isBookable === false ? 'Not accepting consultations' : 'Book Consultation'}
+        </button>
       </div>
     </div>
   );
