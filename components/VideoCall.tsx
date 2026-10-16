@@ -63,7 +63,7 @@ const VideoCall: React.FC<Props> = ({ participant, currentUserId, currentUserNam
         api.addListener('cameraError', () => setError('Camera unavailable. Check browser permissions and close other apps using the camera.'));
         api.addListener('micError', () => setError('Microphone unavailable. Check browser permissions and your selected input device.'));
         api.addListener('errorOccurred', () => setError('The call service reported a connection error. Check your network or try opening the call in a new tab.'));
-        api.addListener('readyToClose', () => endRef.current());
+        api.addListener('readyToClose', () => { if (!stopped) endRef.current(); });
       } catch (error) { if (!stopped) setError(error instanceof Error ? error.message : 'Could not start the call.'); }
     })();
     return () => { stopped = true; clearTimeout(timer); apiRef.current = null; api?.dispose(); };

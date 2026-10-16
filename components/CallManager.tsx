@@ -10,6 +10,8 @@ const CallManager = forwardRef<CallManagerHandle, { user: { id: string; name: st
   const [active, setActive] = useState<any>(null), [incoming, setIncoming] = useState<any>(null);
   const [error, setError] = useState(''), [busy, setBusy] = useState(false);
   const activeRef = useRef<any>(null), starting = useRef(false);
+  const transitionVersion = useRef(0);
+  const [callError, setCallError] = useState('');
   const { addNotification } = useNotification();
   const token = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -20,6 +22,8 @@ const CallManager = forwardRef<CallManagerHandle, { user: { id: string; name: st
   useImperativeHandle(ref, () => ({ start: async target => {
     if (starting.current || activeRef.current) { addNotification('Call in progress', 'End your current call before starting another.', 'warning'); return; }
     starting.current = true;
+    transitionVersion.current++;
+    setCallError('');
     try {
       const result = await startConsultationCall(await token(), target.peerId, target.appointmentId, target.mode || 'video');
       if (!result.success) throw new Error(result.error);
@@ -32,9 +36,11 @@ const CallManager = forwardRef<CallManagerHandle, { user: { id: string; name: st
     const refresh = async () => {
       if (fetching) return;
       fetching = true;
+      const version = transitionVersion.current;
       try {
         const result = await listConsultationCalls(await token());
         if (stopped) return;
+        if (version !== transitionVersion.current) return;
         if (!result.success) throw new Error(result.error);
         setError('');
         const calls = result.calls || [];
@@ -61,21 +67,28 @@ const CallManager = forwardRef<CallManagerHandle, { user: { id: string; name: st
     return () => { stopped = true; clearInterval(interval); window.removeEventListener('focus', refresh); void supabase.removeChannel(channel); };
   }, [user.id]);
   const change = async (call: any, status: 'accepted' | 'declined' | 'ended') => {
+    transitionVersion.current++;
     setBusy(true);
+    setCallError('');
     try {
       const result = await updateConsultationCall(await token(), call.id, status);
       if (!result.success) throw new Error(result.error);
       if (status === 'accepted') { activate(result.call); setIncoming(null); }
       else if (call.id === activeRef.current?.id) activate(null);
       else setIncoming(null);
-    } catch (error) { addNotification('Call update failed', error instanceof Error ? error.message : 'Please retry.', 'error'); }
-    finally { setBusy(false); }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Please retry.';
+      setCallError(message);
+      addNotification('Call update failed', message, 'error');
+    }
+    finally { transitionVersion.current++; setBusy(false); }
   };
   return <>
+    {callError && <div role="alert" className="fixed top-3 left-3 right-3 z-[90] rounded-lg bg-red-100 p-4 text-sm text-red-900 shadow">{callError}<button onClick={() => setCallError('')} className="ml-4 underline">Dismiss</button></div>}
     {error && <div role="status" className="fixed bottom-3 left-3 z-40 max-w-sm rounded-lg bg-amber-50 p-3 text-xs text-amber-900 shadow">{error}</div>}
     {incoming && !active && <div role="alertdialog" aria-label="Incoming call" className="fixed inset-0 z-[70] bg-slate-900/80 flex items-center justify-center p-6">
       <div className="bg-white rounded-2xl p-8 text-center space-y-5"><h2 className="text-xl font-bold">Incoming {incoming.mode} call</h2><p>{incoming.caller_name} is calling you.</p>
-        <button disabled={busy} onClick={() => void change(incoming, 'accepted')} className="bg-green-600 text-white rounded-lg px-5 py-3 mr-3">Answer</button>
+        <button disabled={busy} onClick={() => void change(incoming, 'accepted')} className="bg-green-600 text-white rounded-lg px-5 py-3 mr-3">{busy ? 'Connecting...' : 'Answer'}</button>
         <button disabled={busy} onClick={() => void change(incoming, 'declined')} className="bg-red-600 text-white rounded-lg px-5 py-3">Decline</button>
       </div></div>}
     {active?.status === 'ringing' && <div className="fixed inset-0 z-[70] bg-slate-900 text-white flex flex-col items-center justify-center gap-5"><h2 className="text-xl">Calling {active.callee_name}…</h2><p>Waiting for an answer.</p><button disabled={busy} onClick={() => void change(active, 'ended')} className="bg-red-600 rounded-lg px-5 py-3">Cancel call</button></div>}
