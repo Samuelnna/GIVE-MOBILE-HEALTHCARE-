@@ -3,6 +3,8 @@ export type VideoCallTarget = {
   imageUrl?: string;
   appointmentId?: string | number;
   peerId?: string;
+  roomName?: string;
+  mode?: 'audio' | 'video';
 };
 
 function safeToken(value: string, max = 64) {
@@ -19,6 +21,7 @@ export function chatRoomName(userA: string, userB: string) {
 }
 
 export function roomForCall(target: VideoCallTarget, currentUserId?: string) {
+  if (target.roomName) return safeToken(target.roomName, 128);
   if (target.appointmentId) return consultRoomName(target.appointmentId);
   if (target.peerId && currentUserId) return chatRoomName(currentUserId, target.peerId);
   return '';
@@ -33,6 +36,6 @@ export function canJoinConsult(type?: string, status?: string) {
   const kind = (type || '').toLowerCase();
   const state = (status || '').toLowerCase();
   const isCall = kind.includes('video') || kind.includes('audio');
-  const open = state === 'upcoming' || state === 'pending';
+  const open = state === 'upcoming';
   return isCall && open;
 }

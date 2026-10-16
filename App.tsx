@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import Dashboard from './sections/Dashboard';
 import PendingDashboard from './sections/PendingDashboard';
@@ -17,7 +17,7 @@ import CartSummary from './components/CartSummary';
 import { CartItem, Medication, User, Doctor, Section, Appointment, TriageReport, LabAppointment, LabAppointmentCard, LabTest, Hospital, Order, LabResultReport } from './types';
 import HealthSummary from './sections/HealthSummary';
 import Profile from './sections/Profile';
-import VideoCall from './components/VideoCall';
+import CallManager, { type CallManagerHandle } from './components/CallManager';
 import type { VideoCallTarget } from './utils/video';
 import { useNotification } from './contexts/NotificationContext';
 import PatientRecords from './sections/PatientRecords';
@@ -56,13 +56,20 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   });
 
   const [activeSection, setActiveSection] = useState<Section>('Dashboard');
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const channel = supabase.channel(`app_message_alerts_${currentUser.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `receiver_id=eq.${currentUser.id}` }, () => {
+        if (activeSection !== 'Messaging') addNotification('New message', 'You have a new message. Open Messaging to reply.', 'info');
+      }).subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [currentUser?.id, activeSection]);
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [myMedications, setMyMedications] = useState<Medication[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [isVideoCallActive, setIsVideoCallActive] = useState(false);
-  const [videoCallParticipant, setVideoCallParticipant] = useState<VideoCallTarget | null>(null);
+  const callManager = useRef<CallManagerHandle>(null);
   const [messageRecipient, setMessageRecipient] = useState<{
     id: string;
     name: string;
@@ -651,10 +658,10 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
         }} />;
       case 'Labs': return FEATURES.labs ? <Labs key={`labs-${activeSection}`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
       case 'Pharmacy': return <Pharmacy key={`pharmacy-${activeSection}`} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med, quantity: q }]; }); }} onProceedToCheckout={() => setIsCheckoutOpen(true)} myMedications={myMedications} onSetReminder={() => {}} pharmacyItems={pharmacyItems || []} />;
-      case 'Appointments': return <Appointments key={`appointments-${activeSection}`} user={currentUser!} appointments={appointments} hospitalAppointments={hospitalAppointments} labAppointments={labAppointments} doctors={doctors || []} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} onBookAppointment={() => {}} />;
+      case 'Appointments': return <Appointments key={`appointments-${activeSection}`} user={currentUser!} appointments={appointments} hospitalAppointments={hospitalAppointments} labAppointments={labAppointments} doctors={doctors || []} onStartVideoCall={(p) => callManager.current?.start(p)} onBookAppointment={() => {}} />;
       case 'Profile': return <Profile key={`profile-${activeSection}`} user={currentUser!} onUpdateUser={syncUserWithStorage} />;
       case 'Patient Records': return <PatientRecords key={`records-${activeSection}`} user={currentUser!} reports={triageReports} cards={[]} orders={pharmacyOrders} paymentHistory={paymentHistory} doctors={doctors} hospitals={hospitals} labTests={labTests} hospitalServiceCards={[]} medicationRecords={[]} purchasedMedications={[]} setActiveSection={setActiveSection} onScheduleFromReferral={() => {}} onPurchasePrescription={() => {}} />;
-      case 'Messaging': return <Messaging key={`messages-${activeSection}`} initialRecipient={messageRecipient} onInitialRecipientHandled={() => setMessageRecipient(null)} setActiveSection={setActiveSection} onStartVideoCall={(p) => { setVideoCallParticipant(p); setIsVideoCallActive(true); }} />;
+      case 'Messaging': return <Messaging key={`messages-${activeSection}`} initialRecipient={messageRecipient} onInitialRecipientHandled={() => setMessageRecipient(null)} setActiveSection={setActiveSection} onStartVideoCall={(p) => callManager.current?.start(p)} />;
       case 'Health Summary': return <HealthSummary key={`summary-${activeSection}`} appointments={appointments} />;
       case 'Health Articles': return currentUser?.userType === 'patient'
         ? <HealthArticles />
@@ -714,14 +721,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
       />}
       <CartSummary isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med as any, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med as any, quantity: q }]; }); }} onProceedToCheckout={() => { setIsCartOpen(false); setIsCheckoutOpen(true); }} />
       {isCheckoutOpen && <CheckoutModal cartItems={cartItems} onClose={() => setIsCheckoutOpen(false)} onConfirm={handlePlaceOrder} />}
-      {isVideoCallActive && videoCallParticipant && (
-        <VideoCall
-          participant={videoCallParticipant}
-          currentUserId={currentUser.id}
-          currentUserName={currentUser.name}
-          onEndCall={() => { setIsVideoCallActive(false); setVideoCallParticipant(null); }}
-        />
-      )}
+      <CallManager key={currentUser.id} ref={callManager} user={currentUser} />
       <Footer />
     </div>
   );

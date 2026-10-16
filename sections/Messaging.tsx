@@ -50,6 +50,10 @@ const Messaging: React.FC<{
   const [showUserList, setShowUserList] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const selectedConvoRef = useRef<Convo | null>(null);
+  const accessRequest = useRef(0);
+  const historyRequest = useRef(0);
+  selectedConvoRef.current = selectedConvo;
   const { addNotification } = useNotification();
 
   useEffect(() => {
@@ -60,6 +64,7 @@ const Messaging: React.FC<{
   }, []);
 
   const fetchConversations = async () => {
+    const request = ++historyRequest.current;
     const userId = await getAuthedUserId();
         if (!userId) return [] as Convo[];
 
@@ -68,6 +73,7 @@ const Messaging: React.FC<{
         .select('*, sender:profiles!messages_sender_id_fkey(id, full_name, image_url, user_type, role), receiver:profiles!messages_receiver_id_fkey(id, full_name, image_url, user_type, role)')
         .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
         .order('created_at', { ascending: true });
+    if (request !== historyRequest.current) return [] as Convo[];
     
     if (error) {
         setContactLoadError(`Conversations could not be loaded: ${error.message}`);
@@ -99,9 +105,9 @@ const Messaging: React.FC<{
             });
         });
         const list = Object.values(groups);
-        setConversations(list);
-        if (selectedConvo) {
-            const updated = list.find(c => c.id === selectedConvo.id);
+        setConversations(current => [...list, ...current.filter(c => !list.some(loaded => loaded.id === c.id))]);
+        if (selectedConvoRef.current) {
+            const updated = list.find(c => c.id === selectedConvoRef.current?.id);
             if (updated) setMessages(updated.messages);
         }
         return list;
@@ -126,10 +132,14 @@ const Messaging: React.FC<{
     
     channel.subscribe();
     const onWake = () => { fetchConversations(); fetchProfiles(); };
+    const polling = window.setInterval(() => {
+        if (document.visibilityState === 'visible') void fetchConversations();
+    }, 5000);
     window.addEventListener('focus', onWake);
     document.addEventListener('visibilitychange', onWake);
     return () => {
       supabase.removeChannel(channel);
+      window.clearInterval(polling);
       window.removeEventListener('focus', onWake);
       document.removeEventListener('visibilitychange', onWake);
     };
@@ -189,6 +199,7 @@ const Messaging: React.FC<{
   };
 
   const openConversation = async (conversation: Convo) => {
+      const request = ++accessRequest.current;
       setSelectedConvo(conversation);
       setMessages(conversation.messages);
       setIsGated(true);
@@ -206,6 +217,7 @@ const Messaging: React.FC<{
           message_sender: userId,
           message_receiver: conversation.id,
       });
+      if (request !== accessRequest.current) return;
 
       if (profileError) {
           console.error('Could not verify messaging access:', profileError);
@@ -285,7 +297,6 @@ const Messaging: React.FC<{
                                 {getInitials(convo.participant.name)}
                             </div>
                         )}
-                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
                     </div>
                     <div className="flex-1 overflow-hidden ml-4">
                         <h3 className="font-bold text-slate-800 truncate">{convo.participant.name}</h3>
@@ -375,12 +386,12 @@ const Messaging: React.FC<{
                                 )}
                                 <div>
                                     <h2 className="font-bold text-slate-800 text-sm sm:text-base leading-tight">{selectedConvo.participant.name}</h2>
-                                    <p className="text-[10px] text-green-500 font-bold uppercase tracking-widest">Online</p>
+                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Consultation chat</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-3">
-                                <button onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id })} className="p-2 text-slate-400 hover:text-sky-600 transition-all"><PhoneIcon className="h-5 w-5" /></button>
-                                <button onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id })} className="p-2 text-sky-600 bg-sky-50 rounded-full transition-all"><VideoCameraIcon className="h-5 w-5" /></button>
+                                <button aria-label="Start voice call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'audio' })} className="p-2 text-slate-400 hover:text-sky-600 transition-all"><PhoneIcon className="h-5 w-5" /></button>
+                                <button aria-label="Start video call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'video' })} className="p-2 text-sky-600 bg-sky-50 rounded-full transition-all"><VideoCameraIcon className="h-5 w-5" /></button>
                             </div>
                         </header>
 
