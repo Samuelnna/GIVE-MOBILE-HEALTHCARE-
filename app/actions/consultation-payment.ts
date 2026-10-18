@@ -17,7 +17,7 @@ export async function confirmConsultationPayment(token: string, reference: strin
   }
 }
 
-const CONSULTATION_FEE = 100;
+const CONSULTATION_FEE = 1000;
 const CURRENCY = 'NGN';
 
 // Public checkout configuration is safe to send to the browser. Read it at

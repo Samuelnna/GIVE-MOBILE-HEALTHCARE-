@@ -394,7 +394,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const COMMISSION_RATES = {
       LAB_PROVIDER_SHARE: 0.8, // 80% goes to the Lab, 20% to the platform
       DOCTOR_PROVIDER_SHARE: 0.7, // 70% goes to the Doctor, 30% to the platform
-      CONSULTATION_FEE: 100, // Temporary consultation fee while payment persistence is investigated
+      CONSULTATION_FEE: 1000,
   };
 
   const handleScheduleLabTest = async (details: any) => {

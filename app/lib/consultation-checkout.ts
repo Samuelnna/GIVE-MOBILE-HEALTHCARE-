@@ -25,7 +25,7 @@ export async function prepareCheckout(token: string, professionalId: string) {
   if (professional.user_type !== 'professional') throw new Error('This account is not registered as a healthcare professional. Contact support.');
   if (professional.status !== 'active') throw new Error('This professional has not been approved or is currently inactive. Choose an active professional or contact support.');
   const { data: payment, error: saveError } = await db.from('payments').insert({
-    user_id: user.id, amount: 100, currency: 'NGN', status: 'pending',
+    user_id: user.id, amount: 1000, currency: 'NGN', status: 'pending',
     payment_type: /(doctor|physician|surgeon|consultant|general practitioner|cardiologist|neurologist|pediatrician|dentist|specialist)/i.test(`${professional.role || ''} ${professional.specialty || ''}`)
       ? 'doctor_consultation' : 'professional_consultation', tx_ref: `MDOC-${randomUUID()}`,
     details: { checkout_version: 2, customer_email: user.email,

@@ -54,9 +54,10 @@ const { prepareCheckout, confirmCheckout } = context.exports;
   databaseError = false;
   const pending = await prepareCheckout('token', 'doctor');
   assert.equal(pending.status, 'pending');
+  assert.equal(pending.amount, 1000);
   assert.match(pending.tx_ref, /^MDOC-/);
   const ref = pending.tx_ref;
-  const valid = { id: 123, tx_ref: ref, amount: 100, currency: 'NGN', status: 'successful', customer: { email: 'patient@example.com' } };
+  const valid = { id: 123, tx_ref: ref, amount: 1000, currency: 'NGN', status: 'successful', customer: { email: 'patient@example.com' } };
   await assert.rejects(confirmCheckout(ref, 'other-patient'), /No matching/);
   assert.equal(requests, 0);
   for (const patch of [{ amount: 99 }, { currency: 'USD' }, { tx_ref: 'MDOC-other' }, { customer: { email: 'other@example.com' } }]) {
