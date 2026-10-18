@@ -241,7 +241,7 @@ const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onC
             <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl">
                 <div className="flex justify-between items-center mb-1">
                     <span className="text-sm font-semibold text-emerald-800">Consultation Fee</span>
-                    <span className="font-bold text-emerald-900">₦100</span>
+                    <span className="font-bold text-emerald-900">₦1,000</span>
                 </div>
                 <p className="text-[10px] text-emerald-600 uppercase font-black tracking-wider leading-tight">Payment is required to confirm your booking with the specialist.</p>
             </div>
@@ -249,7 +249,7 @@ const BookAppointmentModal: React.FC<BookAppointmentModalProps> = ({ doctor, onC
         </main>
         <footer className="p-6 border-t border-slate-200 bg-slate-50 text-right">
             <button onClick={handleConfirm} disabled={!selectedDate || !selectedTime || !reason.trim() || availableTypes.length === 0} className="px-6 py-3 bg-emerald-600 text-white font-bold rounded-lg hover:bg-emerald-700 transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg shadow-emerald-100">
-                Confirm Appointment & Pay (₦100)
+                Confirm Appointment & Pay (₦1,000)
             </button>
         </footer>
       </div>
