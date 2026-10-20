@@ -10,6 +10,6 @@ Consultations count appointment rows; completed consultations are those currentl
 
 AI triage counts saved emr_records with record_type Triage, and distinct patients with those records. Opening the assistant, abandoned chats, and unsaved responses are not measured. No diagnostic text is fetched for analytics.
 
-Current cart units are available immediately. Lifetime add-to-cart activity is not recoverable from the cart table because quantities change and carts are cleared after purchase. To start future tracking, run traction_cart_tracking.sql in Supabase SQL Editor. It adds restricted analytics tables and a trigger recording positive quantity changes. It does not backfill current carts or old purchases. Additions remain counted when items are later removed or purchased. The dashboard shows tracking start date. Without the migration, this optional metric shows Not enabled.
+Cart metrics use only the current cart_items snapshot: total medicine units and the number of patient carts. Removing an item reduces this snapshot; checkout clearing removes the purchased cart contents. Historical additions, removals, and checkout events are not queried or displayed. No additional SQL is required. The older traction_cart_tracking.sql is not needed for this view.
 
 Missing data sources are surfaced explicitly. Dashboard numbers are operational reporting, not audited financial statements. Page views, active sessions, retention, and native app installs are not currently tracked and are not invented.

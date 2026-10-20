@@ -25,9 +25,8 @@ export async function getAdminTraction(token: string, period: TractionPeriod = '
       rows('pharmacy_orders', '*'),
       rows('cart_items', 'id, user_id, quantity, created_at'),
       rows('emr_records', 'id, patient_id, record_type, created_at'),
-      rows('analytics_cart_events', 'id, quantity, created_at'),
     ]);
-    const labels = ['Account profiles', 'Payments', 'Consultations', 'Medicine orders', 'Current carts', 'AI triage', 'Cart additions'];
+    const labels = ['Account profiles', 'Payments', 'Consultations', 'Medicine orders', 'Current carts', 'AI triage'];
     const data = results.map((result, index) => {
       if (result.status === 'fulfilled') return result.value;
       missing.push(labels[index]); return [];
@@ -42,14 +41,12 @@ export async function getAdminTraction(token: string, period: TractionPeriod = '
         if (result.data.users.length < 1000) break;
       }
     } catch { missing.push('Auth signups'); accounts = []; }
-    const [settings, tracking] = await Promise.allSettled([
+    const [settings] = await Promise.allSettled([
       db.from('platform_settings').select('data').eq('id', 'commission_rates').maybeSingle(),
-      db.from('analytics_tracking_config').select('started_at').eq('id', 'cart_additions').maybeSingle(),
     ]);
     const rates = settings.status === 'fulfilled' && !settings.value.error ? settings.value.data?.data : null;
     if (!rates) missing.push('Commission settings (default estimates used)');
-    const started = tracking.status === 'fulfilled' && !tracking.value.error ? tracking.value.data?.started_at : null;
     return { success: true, report: summarizeTraction({ accounts, profiles: data[0], payments: data[1], appointments: data[2],
-      orders: data[3], cart: data[4], triage: data[5], cartEvents: data[6], trackingStartedAt: started || null, rates: rates || {}, missing }, period) };
+      orders: data[3], cart: data[4], triage: data[5], rates: rates || {}, missing }, period) };
   } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Could not load traction.' }; }
 }

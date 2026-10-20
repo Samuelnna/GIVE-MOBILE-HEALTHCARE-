@@ -2,8 +2,8 @@ export type TractionPeriod = 'all' | '30' | '90';
 type Row = Record<string, any>;
 export interface TractionInput {
   accounts: Row[]; profiles: Row[]; payments: Row[]; appointments: Row[];
-  orders: Row[]; cart: Row[]; triage: Row[]; cartEvents: Row[];
-  trackingStartedAt: string | null; rates: Row; missing: string[];
+  orders: Row[]; cart: Row[]; triage: Row[];
+  rates: Row; missing: string[];
 }
 export function summarizeTraction(input: TractionInput, period: TractionPeriod, now = new Date()) {
   const since = period === 'all' ? -Infinity : now.getTime() - Number(period) * 86400000;
@@ -58,7 +58,6 @@ export function summarizeTraction(input: TractionInput, period: TractionPeriod, 
     triageReports: triage.length, triageUsers: new Set(triage.map(t => t.patient_id).filter(Boolean)).size,
     currentCartUnits: input.cart.reduce((total, c) => total + Math.max(0, Number(c.quantity || 0)), 0),
     currentCartUsers: new Set(input.cart.map(c => c.user_id).filter(Boolean)).size,
-    cartAddedUnits: input.cartEvents.filter(inPeriod).reduce((total, e) => total + Number(e.quantity || 0), 0),
-    trackingStartedAt: input.trackingStartedAt, byType, chart,
+    byType, chart,
   };
 }

@@ -18,9 +18,8 @@ const input = {
   appointments: [{ status: 'Completed', created_at: current }, { status: 'Pending', created_at: current }, { status: 'Completed', created_at: old }],
   orders: [{ fulfillment_status: 'delivered', receipt_status: 'received', created_at: current }, { fulfillment_status: 'pending', created_at: current }],
   cart: [{ user_id: 'a', quantity: 2 }, { user_id: 'a', quantity: 3 }],
-  cartEvents: [{ quantity: 7, created_at: current }, { quantity: 9, created_at: old }],
   triage: [{ patient_id: 'a', record_type: 'Triage', created_at: current }, { patient_id: 'a', record_type: 'Other', created_at: current }],
-  rates: { doctor_share: .7, pharmacy_share: .9 }, trackingStartedAt: current, missing: [],
+  rates: { doctor_share: .7, pharmacy_share: .9 }, missing: [],
 };
 const summarize = context.exports.summarizeTraction, now = new Date('2026-10-20T12:00:00Z');
 const report = summarize(input, '30', now);
@@ -29,7 +28,7 @@ assert.equal(report.gross, 3000); assert.ok(Math.abs(report.estimatedShare - 500
 assert.equal(report.completedOrders, 1); assert.equal(report.orderCompletionRate, 50);
 assert.equal(report.completedConsultations, 1); assert.equal(report.appointments, 2);
 assert.equal(report.otherCurrencyPayments, 1); assert.equal(report.repeatPatients, 1); assert.equal(report.payingPatients, 2);
-assert.equal(report.currentCartUnits, 5); assert.equal(report.currentCartUsers, 1); assert.equal(report.cartAddedUnits, 7);
+assert.equal(report.currentCartUnits, 5); assert.equal(report.currentCartUsers, 1);
 assert.equal(report.triageReports, 1); assert.equal(report.triageUsers, 1);
 assert.equal(report.chart.length, 6); assert.equal(report.chart.reduce((total, month) => total + month.payments, 0), 3000);
 assert.equal(summarize(input, 'all', now).gross, 4000);
@@ -47,5 +46,5 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/actions/admin-tractio
 (async () => {
   const result = await actionContext.exports.getAdminTraction('token', 'all');
   assert.equal(result.success, false); assert.equal(reads, 1);
-  console.log('PASS: date filtering, currency isolation, gross/share distinction, unique users, repeat payers, completed-order deduplication, saved triage counts, current vs historical carts, source failures, and non-admin denial.');
+  console.log('PASS: date filtering, currency isolation, gross/share distinction, unique users, repeat payers, completed-order deduplication, saved triage counts, current cart snapshots, source failures, and non-admin denial.');
 })().catch(error => { console.error(error); process.exitCode = 1; });
