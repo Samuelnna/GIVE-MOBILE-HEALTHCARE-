@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { getAuthedUserId, supabase } from '../src/supabaseClient';
-import { SendIcon, PhoneIcon, VideoCameraIcon, ChevronLeftIcon, CreditCardIcon } from '../components/IconComponents';
+import { SendIcon, ChevronLeftIcon, CreditCardIcon } from '../components/IconComponents';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface Convo {
@@ -49,7 +49,10 @@ const Messaging: React.FC<{
   const [contactLoadError, setContactLoadError] = useState('');
   const [showUserList, setShowUserList] = useState(false);
   const [isMobileView, setIsMobileView] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const messagePaneRef = useRef<HTMLDivElement>(null);
+  const followLatest = useRef(true);
+  const scrolledConversation = useRef<string | null>(null);
+  const [showLatestButton, setShowLatestButton] = useState(false);
   const selectedConvoRef = useRef<Convo | null>(null);
   const accessRequest = useRef(0);
   const historyRequest = useRef(0);
@@ -98,6 +101,7 @@ const Messaging: React.FC<{
                 };
             }
             groups[otherUser.id].messages.push({
+                id: m.id,
                 role: isMe ? 'user' : 'model',
                 text: m.content,
                 timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -176,7 +180,20 @@ const Messaging: React.FC<{
         return () => { cancelled = true; };
     }, [initialRecipient?.id]);
 
-    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, selectedConvo]);
+  const latestMessageId = messages[messages.length - 1]?.id;
+  useEffect(() => {
+    const pane = messagePaneRef.current;
+    if (!pane || !selectedConvo || isGated || isCheckingAccess) return;
+    const opening = scrolledConversation.current !== selectedConvo.id;
+    scrolledConversation.current = selectedConvo.id;
+    if (opening || followLatest.current) {
+      pane.scrollTo({ top: pane.scrollHeight, behavior: 'auto' });
+      followLatest.current = true;
+      setShowLatestButton(false);
+    } else if (messages.length) {
+      setShowLatestButton(true);
+    }
+  }, [selectedConvo?.id, latestMessageId, messages.length, isGated, isCheckingAccess]);
   
   const startNewConversation = async (profile: any) => {
       const userId = await getAuthedUserId();
@@ -198,16 +215,23 @@ const Messaging: React.FC<{
       setShowUserList(false);
   };
 
-  const openConversation = async (conversation: Convo) => {
+  const openConversation = async (conversation: Convo, background = false) => {
       const request = ++accessRequest.current;
-      setSelectedConvo(conversation);
-      setMessages(conversation.messages);
-      setIsGated(true);
-      setIsCheckingAccess(true);
+      if (!background) {
+        if (selectedConvoRef.current?.id !== conversation.id) {
+          followLatest.current = true;
+          setShowLatestButton(false);
+        }
+        setSelectedConvo(conversation);
+        setMessages(conversation.messages);
+        setIsGated(true);
+        setIsCheckingAccess(true);
+      }
       setAccessError('');
 
       const userId = await getAuthedUserId();
       if (!userId) {
+          setIsGated(true);
           setAccessError('Please sign in again to verify your messaging access.');
           setIsCheckingAccess(false);
           return;
@@ -220,6 +244,7 @@ const Messaging: React.FC<{
       if (request !== accessRequest.current) return;
 
       if (profileError) {
+          setIsGated(true);
           console.error('Could not verify messaging access:', profileError);
           setAccessError(`We could not verify messaging access: ${profileError.message}`);
           addNotification('Messaging unavailable', `We could not verify messaging access: ${profileError.message}`, 'error');
@@ -233,7 +258,7 @@ const Messaging: React.FC<{
 
   useEffect(() => {
     if (!selectedConvo) return;
-    const recheck = () => { void openConversation(selectedConvo); };
+    const recheck = () => { void openConversation(selectedConvoRef.current || selectedConvo, true); };
     const channel = supabase.channel(`chat_payment_access_${selectedConvo.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, recheck)
       .subscribe();
@@ -256,6 +281,7 @@ const Messaging: React.FC<{
     }]);
 
     if (!error) {
+        followLatest.current = true;
         setInputText('');
         fetchConversations();
     } else {
@@ -390,12 +416,26 @@ const Messaging: React.FC<{
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-3">
-                                <button aria-label="Start voice call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'audio' })} className="p-2 text-slate-400 hover:text-sky-600 transition-all"><PhoneIcon className="h-5 w-5" /></button>
-                                <button aria-label="Start video call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'video' })} className="p-2 text-sky-600 bg-sky-50 rounded-full transition-all"><VideoCameraIcon className="h-5 w-5" /></button>
+                                <button type="button" title="Voice call" aria-label="Start voice call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'audio' })} className="group inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-100 bg-emerald-50 text-emerald-700 transition duration-200 hover:border-emerald-200 hover:bg-emerald-100 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-95">
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 transition-transform duration-200 group-hover:-rotate-6">
+                                        <path d="m7.5 3.5 2.1 3.8a1.5 1.5 0 0 1-.3 1.8l-1.5 1.4a14 14 0 0 0 5.7 5.7l1.4-1.5a1.5 1.5 0 0 1 1.8-.3l3.8 2.1a1.5 1.5 0 0 1 .7 1.7l-.5 1.9a2 2 0 0 1-2 1.4A18.5 18.5 0 0 1 2.5 5.3a2 2 0 0 1 1.4-2l1.9-.5a1.5 1.5 0 0 1 1.7.7Z" />
+                                    </svg>
+                                </button>
+                                <button type="button" title="Video call" aria-label="Start video call" onClick={() => onStartVideoCall({ ...selectedConvo.participant, peerId: selectedConvo.id, mode: 'video' })} className="group inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-sky-600 bg-sky-600 text-white shadow-sm shadow-sky-200 transition duration-200 hover:border-sky-700 hover:bg-sky-700 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 active:scale-95">
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 transition-transform duration-200 group-hover:scale-110">
+                                        <rect x="2.5" y="5.5" width="12.5" height="13" rx="3.5" />
+                                        <path d="m15 9 5-3a1 1 0 0 1 1.5.9v10.2a1 1 0 0 1-1.5.9l-5-3" />
+                                    </svg>
+                                </button>
                             </div>
                         </header>
 
-                        <div className="flex-1 p-4 sm:p-6 overflow-y-auto bg-[#F8FAFC]">
+                        <div ref={messagePaneRef} onScroll={() => {
+                            const pane = messagePaneRef.current;
+                            if (!pane) return;
+                            followLatest.current = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 80;
+                            if (followLatest.current) setShowLatestButton(false);
+                        }} className="flex-1 min-h-0 p-4 sm:p-6 overflow-y-auto overscroll-contain bg-[#F8FAFC]">
                              {messages.length === 0 && (
                                  <div className="flex flex-col items-center justify-center h-full text-center p-8">
                                      <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4"><SendIcon className="w-6 h-6 text-slate-300" /></div>
@@ -414,9 +454,14 @@ const Messaging: React.FC<{
                                     <span className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-tighter">{msg.timestamp}</span>
                                 </div>
                             ))}
-                            <div ref={chatEndRef} />
                         </div>
 
+                        {showLatestButton && <button onClick={() => {
+                            const pane = messagePaneRef.current;
+                            followLatest.current = true;
+                            pane?.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
+                            setShowLatestButton(false);
+                        }} className="self-center my-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-700">New messages · Jump to latest ↓</button>}
                         <div className="p-3 sm:p-4 bg-white border-t border-slate-100">
                              <div className="flex items-center gap-2 max-w-4xl mx-auto">
                                 <input 

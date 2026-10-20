@@ -90,6 +90,8 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   const [labAppointments, setLabAppointments] = useState<LabAppointment[]>([]);
   const [labCards, setLabCards] = useState<LabAppointmentCard[]>([]);
   const [pharmacyOrders, setPharmacyOrders] = useState<Order[]>([]);
+  const [pharmacyInitialTab, setPharmacyInitialTab] = useState<'shop' | 'orders'>('shop');
+  const [pharmacyOrderViewVersion, setPharmacyOrderViewVersion] = useState(0);
   const [labResults, setLabResults] = useState<LabResultReport[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
@@ -500,8 +502,10 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
             if (cartError) addNotification('Cart cleanup pending', 'Your order is saved, but the cart could not be cleared. Do not purchase these items again.', 'warning');
             setCartItems([]);
             setIsCheckoutOpen(false);
-            setActiveSection('Patient Records');
-            addNotification('Order placed', 'Your pharmacy order and delivery details were saved.', 'success');
+            setPharmacyInitialTab('orders');
+            setPharmacyOrderViewVersion(version => version + 1);
+            setActiveSection('Pharmacy');
+            addNotification('Order placed and paid', 'Track your medicines in Pharmacy → My orders.', 'success');
         } else if (error) {
             console.error('App: Pharmacy order save error after payment:', error);
             setActiveSection('Patient Records');
@@ -657,7 +661,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
           setActiveSection('Messaging');
         }} />;
       case 'Labs': return FEATURES.labs ? <Labs key={`labs-${activeSection}`} availableTests={labTests || []} appointments={labAppointments} cards={labCards} onScheduleTest={handleScheduleLabTest} results={labResults} /> : <Dashboard user={currentUser!} setActiveSection={setActiveSection} openTriageBot={() => setIsAssistantOpen(true)} />;
-      case 'Pharmacy': return <Pharmacy key={`pharmacy-${activeSection}`} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med, quantity: q }]; }); }} onProceedToCheckout={() => setIsCheckoutOpen(true)} myMedications={myMedications} onSetReminder={() => {}} pharmacyItems={pharmacyItems || []} />;
+      case 'Pharmacy': return <Pharmacy key={`pharmacy-${activeSection}-${pharmacyOrderViewVersion}`} initialTab={pharmacyInitialTab} cartItems={cartItems} onUpdateCart={(med, q) => { updateCartInDB(med, q); setCartItems(prev => { const ex = prev.find(i => i.id === med.id); if (q <= 0) return prev.filter(i => i.id !== med.id); return ex ? prev.map(i => i.id === med.id ? { ...i, quantity: q } : i) : [...prev, { ...med, quantity: q }]; }); }} onProceedToCheckout={() => setIsCheckoutOpen(true)} myMedications={myMedications} onSetReminder={() => {}} pharmacyItems={pharmacyItems || []} />;
       case 'Appointments': return <Appointments key={`appointments-${activeSection}`} user={currentUser!} appointments={appointments} hospitalAppointments={hospitalAppointments} labAppointments={labAppointments} doctors={doctors || []} onStartVideoCall={(p) => callManager.current?.start(p)} onBookAppointment={() => {}} />;
       case 'Profile': return <Profile key={`profile-${activeSection}`} user={currentUser!} onUpdateUser={syncUserWithStorage} />;
       case 'Patient Records': return <PatientRecords key={`records-${activeSection}`} user={currentUser!} reports={triageReports} cards={[]} orders={pharmacyOrders} paymentHistory={paymentHistory} doctors={doctors} hospitals={hospitals} labTests={labTests} hospitalServiceCards={[]} medicationRecords={[]} purchasedMedications={[]} setActiveSection={setActiveSection} onScheduleFromReferral={() => {}} onPurchasePrescription={() => {}} />;
@@ -681,7 +685,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   );
 
   return (
-    <div className="bg-[#FAFBFC] min-h-screen font-sans text-slate-800 overflow-x-hidden">
+    <div className="bg-[#FAFBFC] min-h-screen font-sans text-slate-800 overflow-x-clip">
       <script src="https://checkout.flutterwave.com/v3.js" async></script>
       {initialLoading && <LoadingOverlay />}
       <Header user={currentUser} activeSection={activeSection} setActiveSection={setActiveSection} cartItems={cartItems} onCartClick={() => setIsCartOpen(true)} onLogout={handleLogout} />

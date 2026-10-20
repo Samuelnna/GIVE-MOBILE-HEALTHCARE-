@@ -1,3 +1,4 @@
+import AdminWorkspace, { AdminPanel } from '../components/AdminWorkspace';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../src/supabaseClient';
 import { useNotification } from '../contexts/NotificationContext';
@@ -5,6 +6,7 @@ import { Cog6ToothIcon, ChartBarIcon } from '../components/IconComponents';
 import { flwService } from '../services/flutterwave';
 import { createSubaccountAction, verifyTransactionAction } from '../app/actions/subaccount';
 import { getAdminPayments } from '../app/actions/admin-payments';
+import { updatePharmacyFulfillment } from '../app/actions/pharmacy-orders';
 
 interface EntityModalProps {
   title: string;
@@ -165,6 +167,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
     ]);
 
     const payChannel = supabase.channel('admin_payments_realtime')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pharmacy_orders' }, fetchPharmacyOrders)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, fetchPayments)
         .subscribe();
     const refreshPaymentsOnFocus = () => { void fetchPayments(); };
@@ -299,10 +302,15 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   };
 
   const handleUpdateFulfillment = async (orderId: string, status: string) => {
-    const { error } = await supabase.from('pharmacy_orders').update({ fulfillment_status: status }).eq('id', orderId);
-    if (!error) {
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) throw new Error('Please sign in again.');
+        const result = await updatePharmacyFulfillment(session.access_token, orderId, status);
+        if (!result.success) throw new Error(result.error);
         addNotification('Success', `Order marked as ${status}`, 'success');
-        fetchPharmacyOrders();
+        await fetchPharmacyOrders();
+    } catch (error) {
+        addNotification('Dispatch update failed', error instanceof Error ? error.message : 'Could not update this order.', 'error');
     }
   };
 
@@ -745,13 +753,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   ];
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6 sm:space-y-8">
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 text-center sm:text-left">Admin Dashboard</h2>
-        <button onClick={() => setShowBlogModal(true)} className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-md active:scale-95 text-sm sm:text-base">New Blog Post</button>
-      </div>
+    <AdminWorkspace onNewPost={() => setShowBlogModal(true)} pendingProfessionals={verifications.length} approvedProfessionals={approvedVerifications.length} pendingOrders={pharmacyOrders.filter(order => order.fulfillment_status !== 'delivered' && order.receipt_status !== 'received').length} applications={careerApplications.filter(application => !['closed', 'contacted'].includes(application.status)).length} successfulPayments={displayPayments.filter(payment => ['successful', 'completed'].includes(String(payment.status).toLowerCase())).length} receivedPayments={displayPayments.filter(payment => ['successful', 'completed'].includes(String(payment.status).toLowerCase()) && (!payment.currency || payment.currency === 'NGN')).reduce((total, payment) => total + Number(payment.amount || 0), 0)}>
+      
 
-            <section className="bg-white rounded-xl border border-emerald-100 shadow-md overflow-hidden">
+            <AdminPanel section="careers">
+<section className="bg-white rounded-xl border border-emerald-100 shadow-md overflow-hidden">
                 <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
                     <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700">People interested in joining</p>
@@ -781,10 +787,12 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                     {careerApplications.length === 0 && <p className="p-10 text-center text-sm font-medium text-slate-400">No career applications yet.</p>}
                 </div>
             </section>
+</AdminPanel>
 
       {/* Platform Configuration (Revenue Sharing) */}
       {/* Platform Configuration (Revenue Sharing) */}
-      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-emerald-100 overflow-hidden relative">
+      <AdminPanel section="settings">
+<div className="bg-white p-4 sm:p-6 rounded-xl shadow-md border border-emerald-100 overflow-hidden relative">
           <div className="absolute top-0 right-0 p-8 opacity-5 hidden sm:block">
               <Cog6ToothIcon className="h-24 w-24" />
           </div>
@@ -889,9 +897,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
             )}
           </div>
       </div>
+</AdminPanel>
 
       {/* NEW: Prominent Lab Section at Top */}
-      <div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-2 border-sky-100 overflow-hidden">
+      <AdminPanel section="labs">
+<div className="bg-white p-4 sm:p-6 rounded-xl shadow-lg border-2 border-sky-100 overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center border-b pb-4 mb-4 gap-4">
             <h3 className="text-lg sm:text-xl font-black text-slate-800 flex items-center gap-2">
                 <span className="bg-sky-600 text-white p-1 rounded text-xs sm:text-sm">LAB</span> Laboratory Management
@@ -962,8 +972,10 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 </div>
             </div>
       </div>
+</AdminPanel>
 
-      <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+      <AdminPanel section="professionals">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
         <h3 className="text-xl font-bold mb-4 border-b pb-2 text-slate-800">PENDING VERIFICATIONS ({verifications.length})</h3>
         
         {verifications.length === 0 ? (
@@ -996,8 +1008,10 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
           </div>
         )}
       </div>
+</AdminPanel>
 
-            <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+            <AdminPanel section="professionals">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
                 <h3 className="text-xl font-bold mb-4 border-b pb-2 text-slate-800">APPROVED PROFESSIONALS ({approvedVerifications.length})</h3>
                 {approvedVerifications.length === 0 ? (
                     <p className="text-slate-500">No approved professionals yet.</p>
@@ -1049,10 +1063,12 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                     </div>
                 )}
             </div>
+</AdminPanel>
 
       <div className="grid grid-cols-1 gap-6">
         {/* Blog Posts Management */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="content">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2 flex justify-between items-center">
                 Health Topics & Blogs
                 <span className="text-xs bg-slate-100 px-2 py-1 rounded-full text-slate-500 font-bold">{healthTopics.length} Posts</span>
@@ -1086,9 +1102,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {healthTopics.length === 0 && <p className="text-center py-8 text-slate-400">No blog posts yet. Click the button above to publish your first one!</p>}
             </div>
         </div>
+</AdminPanel>
 
         {/* Referrals Tracking */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="clinical">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Referrals (Hospitals & Labs)</h3>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -1119,9 +1137,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {referrals.length === 0 && <p className="text-center py-4 text-slate-500">No referrals found.</p>}
             </div>
         </div>
+</AdminPanel>
 
         {/* Prescription Tracking */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="clinical">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Medical Prescriptions</h3>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
@@ -1141,9 +1161,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {prescriptions.length === 0 && <p className="text-center py-4 text-slate-500">No prescriptions found.</p>}
             </div>
         </div>
+</AdminPanel>
 
         {/* Hospital Appointments Tracking */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 overflow-hidden">
+        <AdminPanel section="clinical">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200 overflow-hidden">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 className="text-xl font-bold text-slate-800">Hospital Appointments</h3>
                 <button onClick={fetchHospAppts} className="text-sky-600 text-xs font-bold hover:underline">Refresh List</button>
@@ -1166,10 +1188,12 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {hospAppts.length === 0 && <p className="text-center py-4 text-slate-500">No hospital appointments found.</p>}
             </div>
         </div>
+</AdminPanel>
 
 
         {/* Payment History Tracking */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="payments">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Financial Transactions (Payments)</h3>
             <button onClick={() => void fetchPayments()} className="mb-4 px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-sm font-bold">Refresh payments</button>
             {paymentLoadError && <p className="text-center py-4 text-red-600">Payment records could not be loaded: {paymentLoadError}</p>}
@@ -1207,9 +1231,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {!paymentLoadError && displayPayments.length === 0 && <p className="text-center py-4 text-slate-500 italic">No payments recorded yet.</p>}
             </div>
         </div>
+</AdminPanel>
 
         {/* Prescription Review Queue */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-emerald-100">
+        <AdminPanel section="pharmacy">
+<div className="bg-white p-6 rounded-xl shadow-md border border-emerald-100">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 className="text-xl font-bold text-slate-800">Prescription Review Queue</h3>
                 <button onClick={fetchPharmacyPrescriptionRequests} className="text-emerald-700 text-xs font-bold hover:underline">Refresh</button>
@@ -1231,9 +1257,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {pharmacyPrescriptionRequests.length === 0 && <p className="py-6 text-center text-sm text-slate-400">No prescription uploads yet.</p>}
             </div>
         </div>
+</AdminPanel>
 
         {/* Pharmacy Orders & Fulfillment */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="pharmacy">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <div className="flex justify-between items-center mb-4 border-b pb-2">
                 <h3 className="text-xl font-bold text-slate-800">Pharmacy Order Fulfillment</h3>
                 <button onClick={fetchPharmacyOrders} className="text-sky-600 text-xs font-bold hover:underline">Refresh Orders</button>
@@ -1268,8 +1296,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                         o.fulfillment_status === 'dispatched' ? 'bg-sky-100 text-sky-700' :
                                         'bg-amber-100 text-amber-700'
                                     }`}>
-                                        {o.fulfillment_status || 'Pending'}
+                                        {o.fulfillment_status === 'dispatched' ? 'With dispatch' : o.fulfillment_status || 'Pending'}
                                     </span>
+                                    {o.receipt_status && <p className={`mt-2 text-xs font-bold ${o.receipt_status === 'not_received' ? 'text-red-600' : o.receipt_status === 'received' ? 'text-emerald-700' : 'text-slate-500'}`}>
+                                        {o.receipt_status === 'received' ? 'Patient received drug' : o.receipt_status === 'not_received' ? 'Patient reports: not received' : 'Not marked as received'}
+                                    </p>}
                                 </td>
                                 <td className="py-4 text-right">
                                     <div className="flex justify-end gap-2">
@@ -1298,9 +1329,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 {pharmacyOrders.length === 0 && <p className="text-center py-8 text-slate-400 italic">No pharmacy orders to fulfill.</p>}
             </div>
         </div>
+</AdminPanel>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <AdminPanel section="providers">
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Hospitals */}
         <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
           <div className="flex justify-between items-center mb-4 border-b pb-2">
@@ -1457,10 +1490,12 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
           <button onClick={() => setShowLabModal(true)} className="bg-sky-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-sky-700 w-full transition-colors">+ Add New Laboratory</button>
         </div>
       </div>
+</AdminPanel>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Medication Inventory */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="pharmacy">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Drug Inventory</h3>
             <div className="overflow-y-auto max-h-80">
                 <table className="w-full text-left text-sm">
@@ -1482,9 +1517,11 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 </table>
             </div>
         </div>
+</AdminPanel>
 
         {/* Lab Tests Inventory */}
-        <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
+        <AdminPanel section="labs">
+<div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
             <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Lab Test Directory</h3>
             <div className="overflow-y-auto max-h-80">
                 <table className="w-full text-left text-sm">
@@ -1503,6 +1540,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                 </table>
             </div>
         </div>
+</AdminPanel>
       </div>
 
       {showHospitalModal && (
@@ -1868,7 +1906,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
               </div>
           </div>
       )}
-    </div>
+    </AdminWorkspace>
   );
 };
 

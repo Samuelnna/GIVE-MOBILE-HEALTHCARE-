@@ -4,6 +4,7 @@ import { supabase } from '../src/supabaseClient';
 import type { Medication, CartItem, Reminder, MedicationRecord } from '../types';
 import MedicationDetailModal from '../components/MedicationDetailModal';
 import ReminderModal from '../components/ReminderModal';
+import PharmacyOrders from '../components/PharmacyOrders';
 import { DocumentTextIcon, MinusIcon, PlusIcon, UploadIcon, SparklesIcon, BellIcon, CalendarIcon, SearchIcon, ShoppingCartIcon, CheckCircleIcon } from '../components/IconComponents';
 import { getAuthedUserId } from '../src/supabaseClient';
 
@@ -257,6 +258,7 @@ const MyMedicationCard: React.FC<{ med: Medication; onSetReminder: () => void; }
 // --- Main Pharmacy Component ---
 
 interface PharmacyProps {
+  initialTab?: 'shop' | 'orders';
   cartItems: CartItem[];
   onUpdateCart: (med: Medication, quantity: number) => void;
   onProceedToCheckout: () => void;
@@ -266,8 +268,9 @@ interface PharmacyProps {
   medicationRecords?: MedicationRecord[]; // API fetched patient prescriptions
 }
 
-const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedToCheckout, myMedications, onSetReminder, pharmacyItems, medicationRecords }) => {
-  const [activeTab, setActiveTab] = useState<'shop' | 'myMedications'>('shop');
+const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedToCheckout, myMedications, onSetReminder, pharmacyItems, medicationRecords, initialTab = 'shop' }) => {
+  const [activeTab, setActiveTab] = useState<'shop' | 'myMedications' | 'orders'>(initialTab);
+  useEffect(() => { setActiveTab(initialTab); }, [initialTab]);
   const [searchTerm, setSearchTerm] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [selectedLocation, setSelectedLocation] = useState('All Locations');
@@ -575,13 +578,14 @@ const Pharmacy: React.FC<PharmacyProps> = ({ cartItems, onUpdateCart, onProceedT
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-8">
             <div className="border-b border-slate-200">
-                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="Tabs">
                     <button onClick={() => setActiveTab('shop')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'shop' ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>Shop</button>
+                    <button onClick={() => setActiveTab('orders')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'orders' ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>My orders</button>
                     <button onClick={() => setActiveTab('myMedications')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'myMedications' ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'}`}>My Medications</button>
                 </nav>
             </div>
             <div className="mt-6">
-                {activeTab === 'shop' ? <ShopView /> : <MyMedicationsView />}
+                {activeTab === 'orders' ? <PharmacyOrders /> : activeTab === 'shop' ? <ShopView /> : <MyMedicationsView />}
             </div>
         </div>
       </div>
