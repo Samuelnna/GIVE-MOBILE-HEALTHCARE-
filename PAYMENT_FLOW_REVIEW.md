@@ -1,6 +1,6 @@
 # Payment and booking review
 
-## Consultation with any active professional
+## Consultation with any professional
 
 Doctors, pharmacists, nurses, and other professionals use the Professionals booking list and the same appointments table. A server-created pending payment is saved before checkout. Successful server verification updates it. The browser then creates a Pending appointment linked by payment_id. The selected professional loads appointments by doctor_id (the historical column name also stores other professional IDs), accepts it as Upcoming, and can open the patient chat using the new Chat button.
 
