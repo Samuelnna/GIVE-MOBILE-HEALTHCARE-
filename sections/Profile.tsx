@@ -512,6 +512,15 @@ const Profile: React.FC<ProfileProps> = ({ user, onUpdateUser }) => {
             <NotificationPreferenceRow title="Platform Announcements" />
         </div>
       </div>
+      <section className="bg-white rounded-lg shadow-md p-6 space-y-3">
+        <h2 className="text-2xl font-bold text-slate-700">Privacy and account</h2>
+        <p className="text-slate-600">Review how your information is used or request deletion of your account and associated data.</p>
+        <div className="flex flex-wrap gap-5">
+          <a href="/privacy-policy" className="text-sky-700 underline">Privacy policy</a>
+          <a href="/data-use" className="text-sky-700 underline">Data use</a>
+          <a href="/delete-account" className="text-red-700 underline font-semibold">Delete account</a>
+        </div>
+      </section>
       {showPayoutModal && (
           <PayoutModal 
             isSaving={isSavingPayout} 

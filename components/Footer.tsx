@@ -22,6 +22,9 @@ const Footer: React.FC = () => {
               <li><a href="/about" className="text-slate-300 hover:text-white">About</a></li>
               <li><a href="/careers" className="text-slate-300 hover:text-white">Careers</a></li>
               <li><a href="/about#contact" className="text-slate-300 hover:text-white">Contact</a></li>
+              <li><a href="/privacy-policy" className="text-slate-300 hover:text-white">Privacy policy</a></li>
+              <li><a href="/data-use" className="text-slate-300 hover:text-white">Data use</a></li>
+              <li><a href="/delete-account" className="text-slate-300 hover:text-white">Delete account</a></li>
             </ul>
           </div>
           <div>

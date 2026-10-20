@@ -336,7 +336,7 @@ const Messaging: React.FC<{
 
   return (
     <div className="container mx-auto px-0 sm:px-6 lg:px-8 py-0 sm:py-8">
-        <div className="bg-slate-50 md:bg-white md:rounded-2xl md:shadow-xl h-[100vh] md:h-[80vh] flex overflow-hidden relative">
+        <div className="bg-slate-50 md:bg-white md:rounded-2xl md:shadow-xl h-[calc(100dvh-5.5rem)] md:h-[calc(100dvh-12rem)] min-h-0 flex overflow-hidden relative">
             
             <ConversationList />
 
@@ -366,7 +366,7 @@ const Messaging: React.FC<{
             )}
 
             {/* Chat Area */}
-            <div className={`flex flex-col h-full bg-white ${isMobileView && !selectedConvo ? 'hidden' : 'flex-1'}`}>
+            <div className={`flex min-h-0 min-w-0 flex-col h-full overflow-hidden bg-white ${isMobileView && !selectedConvo ? 'hidden' : 'flex-1'}`}>
                 {selectedConvo ? (
                     isGated ? (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50">
@@ -398,7 +398,7 @@ const Messaging: React.FC<{
                         </div>
                     ) : (
                     <>
-                        <header className="p-3 sm:p-4 border-b border-slate-200 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-10">
+                        <header className="shrink-0 p-3 sm:p-4 border-b border-slate-200 flex justify-between items-center bg-white/80 backdrop-blur-md sticky top-0 z-10">
                             <div className="flex items-center gap-3">
                                 {isMobileView && (
                                     <button onClick={() => setSelectedConvo(null)} className="p-1 text-slate-400 hover:text-slate-800 transition-colors"><ChevronLeftIcon className="w-6 h-6" /></button>
@@ -462,17 +462,19 @@ const Messaging: React.FC<{
                             pane?.scrollTo({ top: pane.scrollHeight, behavior: 'smooth' });
                             setShowLatestButton(false);
                         }} className="self-center my-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-700">New messages · Jump to latest ↓</button>}
-                        <div className="p-3 sm:p-4 bg-white border-t border-slate-100">
+                        <div className="shrink-0 p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white border-t border-slate-100">
                              <div className="flex items-center gap-2 max-w-4xl mx-auto">
                                 <input 
                                     type="text" 
                                     placeholder="Write a message..." 
-                                    className="flex-1 p-3 bg-slate-100 border-none rounded-2xl focus:ring-2 focus:ring-sky-500 text-sm" 
+                                    aria-label="Message text"
+                                    className="min-w-0 flex-1 p-3 bg-slate-100 text-slate-900 placeholder:text-slate-500 border-none rounded-2xl focus:ring-2 focus:ring-sky-500 text-base sm:text-sm" 
                                     value={inputText} 
                                     onChange={(e) => setInputText(e.target.value)} 
-                                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()} 
+                                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); void handleSendMessage(); } }} 
                                 />
                                 <button 
+                                    aria-label="Send message"
                                     onClick={handleSendMessage} 
                                     disabled={!inputText.trim()}
                                     className="p-3.5 bg-sky-600 text-white rounded-2xl shadow-lg shadow-sky-100 hover:bg-sky-700 transition disabled:opacity-50 active:scale-95"
