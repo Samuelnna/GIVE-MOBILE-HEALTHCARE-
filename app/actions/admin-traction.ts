@@ -1,6 +1,7 @@
 'use server';
 import { checkoutUser, paymentClient } from '../lib/consultation-checkout';
 import { summarizeTraction, type TractionPeriod } from '../../src/traction';
+import { reconcileGatewayPayments } from '../lib/payment-reconciliation';
 
 export async function getAdminTraction(token: string, period: TractionPeriod = 'all') {
   try {
@@ -8,6 +9,11 @@ export async function getAdminTraction(token: string, period: TractionPeriod = '
     const { data: admin, error } = await db.from('profiles').select('user_type, status').eq('id', user.id).maybeSingle();
     if (error || admin?.user_type !== 'admin' || admin.status !== 'active') throw new Error('Active administrator access is required.');
     if (!['all', '30', '90'].includes(period)) throw new Error('Invalid reporting period.');
+    let reconciliationWarning = '';
+    try {
+      const result = await reconcileGatewayPayments(true);
+      if (result.failed) reconciliationWarning = `${result.failed} gateway payments still need reconciliation. Payment volume may be incomplete.`;
+    } catch { reconciliationWarning = 'Flutterwave reconciliation is unavailable. Showing saved payments; payment volume may be incomplete.'; }
     const missing: string[] = [];
     async function rows(table: string, columns: string) {
       const collected: Record<string, any>[] = [];
@@ -46,7 +52,7 @@ export async function getAdminTraction(token: string, period: TractionPeriod = '
     ]);
     const rates = settings.status === 'fulfilled' && !settings.value.error ? settings.value.data?.data : null;
     if (!rates) missing.push('Commission settings (default estimates used)');
-    return { success: true, report: summarizeTraction({ accounts, profiles: data[0], payments: data[1], appointments: data[2],
-      orders: data[3], cart: data[4], triage: data[5], rates: rates || {}, missing }, period) };
+    return { success: true, report: { ...summarizeTraction({ accounts, profiles: data[0], payments: data[1], appointments: data[2],
+      orders: data[3], cart: data[4], triage: data[5], rates: rates || {}, missing }, period), reconciliationWarning } };
   } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Could not load traction.' }; }
 }

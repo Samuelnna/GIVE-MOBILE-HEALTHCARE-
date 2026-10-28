@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
-import { confirmCheckout, paymentClient } from '../../../lib/consultation-checkout';
+import { recordGatewayPayment, verifyGatewayPayment } from '../../../lib/payment-reconciliation';
 
 export const runtime = 'nodejs';
 
@@ -14,16 +14,13 @@ export async function POST(request: NextRequest) {
   try { event = await request.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
   if (event.event !== 'charge.completed') return NextResponse.json({ received: true });
   const reference = event.data?.tx_ref;
-  if (typeof reference !== 'string' || !/^MDOC-[A-Za-z0-9-]+$/.test(reference)) return NextResponse.json({ received: true });
+  if (typeof reference !== 'string' || !/^(MDOC|GIVE|MOB)-[A-Za-z0-9-]+$/.test(reference)) return NextResponse.json({ received: true });
   try {
-    const { data, error } = await paymentClient().from('payments').select('details').eq('tx_ref', reference).maybeSingle();
-    if (error) throw error;
-    if (data?.details?.checkout_version !== 2) return NextResponse.json({ received: true });
     if (event.data?.status !== 'successful') return NextResponse.json({ received: true });
-    await confirmCheckout(reference, undefined, String(event.data?.id || ''));
+    await recordGatewayPayment(await verifyGatewayPayment(reference));
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error('Consultation webhook confirmation failed:', error);
+    console.error('Payment webhook confirmation failed:', error);
     return NextResponse.json({ error: 'Retry confirmation' }, { status: 503 });
   }
 }

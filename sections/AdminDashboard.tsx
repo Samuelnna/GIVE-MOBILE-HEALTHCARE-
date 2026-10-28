@@ -409,7 +409,8 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
           profiles (
             full_name,
             email,
-            role
+            role,
+            status
           )
         `)
                 .in('status', ['pending', 'approved']);
@@ -425,7 +426,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         const verificationsWithProfiles = await Promise.all((vData || []).map(async (v) => {
           const { data: pData } = await supabase
             .from('profiles')
-            .select('full_name, email, role')
+            .select('full_name, email, role, status')
             .eq('id', v.user_id)
             .single();
           return { ...v, profiles: pData };
@@ -583,43 +584,23 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
     }
   };
 
-  const handleApprove = async (id: string, userId: string) => {
+  const reviewProfessional = async (id: string, userId: string, status: 'approved' | 'rejected') => {
     try {
-            const { error: verificationError } = await supabase
-                .from('professional_verifications')
-                .update({ status: 'approved', reviewed_at: new Date().toISOString() })
-                .eq('id', id);
-            if (verificationError) throw verificationError;
-
-            const { error: profileError } = await supabase.from('profiles').update({ status: 'active' }).eq('id', userId);
-            if (profileError) throw profileError;
-      addNotification('Success', 'Professional approved', 'success');
-      fetchVerifications();
-    } catch (e) {
-            addNotification('Approval Error', (e as Error).message, 'error');
+      const { data, error } = await supabase.rpc('review_professional_verification', {
+        p_verification_id: id, p_status: status,
+      });
+      if (error) throw new Error(error.code === 'PGRST202'
+        ? 'Approval sync is not installed yet. Run fix_professional_approval_sync.sql in Supabase SQL Editor.'
+        : error.message);
+      if (data !== userId) throw new Error('The reviewed profile did not match the selected professional. Refresh the list.');
+      addNotification('Success', status === 'approved' ? 'Professional approved and consultation bookings enabled.' : 'Professional removed from the directory.', 'success');
+      await fetchVerifications();
+    } catch (error) {
+      addNotification('Review failed', error instanceof Error ? error.message : 'Could not update professional status.', 'error');
     }
   };
-
-  const handleReject = async (id: string, userId: string) => {
-    try {
-            const { error: verificationError } = await supabase
-                .from('professional_verifications')
-                .update({ status: 'rejected' })
-                .eq('id', id);
-            if (verificationError) throw verificationError;
-
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .update({ status: 'rejected' })
-                .eq('id', userId);
-            if (profileError) throw profileError;
-
-            addNotification('Success', 'Professional removed from the directory', 'success');
-      fetchVerifications();
-        } catch (e) {
-            addNotification('Removal Error', (e as Error).message, 'error');
-    }
-  };
+  const handleApprove = (id: string, userId: string) => reviewProfessional(id, userId, 'approved');
+  const handleReject = (id: string, userId: string) => reviewProfessional(id, userId, 'rejected');
 
   const handlePublishBlog = async (values: any) => {
     setIsUploading(true);
@@ -1031,7 +1012,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                             <tbody className="divide-y divide-slate-100">
                                 {approvedVerifications.map((v) => (
                                     <tr key={v.id} className="hover:bg-slate-50/70">
-                                        <td className="p-3 font-bold text-slate-700">{v.profiles?.full_name || 'Unknown professional'}</td>
+                                        <td className="p-3 font-bold text-slate-700">{v.profiles?.full_name || 'Unknown professional'}<p className={`mt-1 text-xs font-medium ${v.profiles?.status === 'active' ? 'text-emerald-700' : 'text-amber-700'}`}>{v.profiles?.status === 'active' ? 'Accepting consultations' : 'Bookings not enabled'}</p></td>
                                         <td className="p-3 text-slate-600">{v.profiles?.role || '—'}</td>
                                         <td className="p-3 text-slate-600">{v.license_number || '—'}</td>
                                         <td className="p-3 text-slate-600">
@@ -1045,6 +1026,7 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
                                             ) : '—'}
                                         </td>
                                         <td className="p-3">
+                                            {v.profiles?.status !== 'active' && <button onClick={() => handleApprove(v.id, v.user_id)} className="mb-2 mr-2 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700">Enable bookings</button>}
                                             <button
                                                 onClick={() => {
                                                     if (window.confirm(`Remove ${v.profiles?.full_name || 'this professional'} from the directory? Their account and history will be preserved.`)) {

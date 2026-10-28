@@ -31,6 +31,7 @@ import {
   confirmConsultationPayment,
 } from './app/actions/consultation-payment';
 import { loadPublicCatalogs, loadUserData } from './src/appData';
+import { saveVerifiedServicePayment } from './app/actions/verified-payment';
 import { FEATURES } from './src/features';
 import HealthArticles from './sections/HealthArticles';
 
@@ -272,15 +273,12 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
   };
 
   const persistSuccessfulPayment = async (payment: Record<string, unknown>) => {
-      const { data, error } = await supabase.from('payments').insert([payment]).select('*').single();
-      if (error) {
-          console.error('App: Payment record insert failed:', error);
-          throw new Error(`Payment record could not be saved: ${error.message}`);
-      }
-      if (!data) {
-          throw new Error('Payment record insert returned no saved payment.');
-      }
-      setPaymentHistory(prev => [data, ...prev]);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Sign in again to confirm payment. Do not pay again.');
+      const result = await saveVerifiedServicePayment(session.access_token, payment);
+      if (!result.success || !result.payment) throw new Error(result.error || 'Payment could not be recorded.');
+      const data = result.payment;
+      setPaymentHistory(prev => [data, ...prev.filter(row => row.id !== data.id)]);
       return data;
   };
 

@@ -149,7 +149,7 @@ export async function loadPublicCatalogs() {
         .from('profiles')
         .select('*, professional_verifications(selfie_url)')
         .eq('user_type', 'professional')
-        .in('status', ['active', 'pending']),
+        .eq('status', 'active'),
       [] as any[]
     ),
     all(supabase.from('platform_settings').select('*').eq('id', 'commission_rates').maybeSingle(), null as any),
