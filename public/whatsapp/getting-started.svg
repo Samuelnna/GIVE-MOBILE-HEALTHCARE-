@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+  <defs>
+    <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#082e4b"/><stop offset="1" stop-color="#064e50"/></linearGradient>
+  </defs>
+  <rect width="1080" height="1080" rx="40" fill="url(#bg)"/>
+  <circle cx="1000" cy="55" r="240" fill="#19c9ba" opacity=".08"/>
+  <circle cx="40" cy="1030" r="270" fill="#19c9ba" opacity=".08"/>
+  <g font-family="Arial, sans-serif">
+    <rect x="76" y="76" width="64" height="64" rx="18" fill="#21c5b3"/>
+    <path d="M108 90v36M90 108h36" stroke="#fff" stroke-width="10" stroke-linecap="round"/>
+    <text x="160" y="123" font-size="46" font-weight="700" fill="#fff">MobileDoc</text>
+    <text x="76" y="222" font-size="61" font-weight="700" fill="#fff">A clearer next step.</text>
+    <text x="76" y="277" font-size="34" fill="#b5e6e2">Health guidance, right here on WhatsApp.</text>
+    <path d="M141 413v344" stroke="#4f8e91" stroke-width="5" stroke-dasharray="8 12"/>
+    <g>
+      <rect x="76" y="333" width="928" height="164" rx="26" fill="#fff"/>
+      <circle cx="141" cy="415" r="39" fill="#d8f5ed"/>
+      <text x="141" y="430" text-anchor="middle" font-size="43" font-weight="700" fill="#08766c">1</text>
+      <text x="213" y="405" font-size="43" font-weight="700" fill="#0c324b">Tell us what is bothering you</text>
+      <text x="213" y="453" font-size="31" fill="#476272">Describe symptoms in your own words.</text>
+    </g>
+    <g>
+      <rect x="76" y="529" width="928" height="164" rx="26" fill="#fff"/>
+      <circle cx="141" cy="611" r="39" fill="#d8f5ed"/>
+      <text x="141" y="626" text-anchor="middle" font-size="43" font-weight="700" fill="#08766c">2</text>
+      <text x="213" y="601" font-size="43" font-weight="700" fill="#0c324b">Answer focused questions</text>
+      <text x="213" y="649" font-size="31" fill="#476272">One useful question at a time.</text>
+    </g>
+    <g>
+      <rect x="76" y="725" width="928" height="164" rx="26" fill="#fff"/>
+      <circle cx="141" cy="807" r="39" fill="#d8f5ed"/>
+      <text x="141" y="822" text-anchor="middle" font-size="43" font-weight="700" fill="#08766c">3</text>
+      <text x="213" y="797" font-size="43" font-weight="700" fill="#0c324b">Understand your next step</text>
+      <text x="213" y="845" font-size="31" fill="#476272">Get guidance on seeking care.</text>
+    </g>
+    <text x="76" y="965" font-size="31" fill="#b5e6e2">AI guidance, not a diagnosis or emergency service.</text>
+    <text x="76" y="1015" font-size="28" fill="#fff">mobiledoc247.com</text>
+  </g>
+</svg>

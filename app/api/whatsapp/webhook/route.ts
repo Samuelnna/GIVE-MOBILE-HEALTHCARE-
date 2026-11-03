@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validWhatsAppSignature, incomingWhatsAppMessages, oncePerWhatsAppMessage,
-  generateWhatsAppReply, sendWhatsAppReply } from '../../../lib/whatsapp';
+import { validWhatsAppSignature, incomingWhatsAppMessages } from '../../../lib/whatsapp';
+import { handleWhatsAppTriage } from '../../../lib/whatsapp-triage';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,19 +33,22 @@ export async function POST(request: NextRequest) {
   if (!process.env.GEMINI_API_KEY?.trim() || !process.env.WHATSAPP_ACCESS_TOKEN?.trim()) {
     return NextResponse.json({ error: 'Reply service is not configured' }, { status: 503 });
   }
-  if (messages.length > 5) return NextResponse.json({ error: 'Batch exceeds demo capacity' }, { status: 503 });
+  if (messages.length > 5) return NextResponse.json({ error: 'Batch exceeds processing capacity' }, { status: 503 });
   try {
     // Await delivery so Meta can retry failures; do not start untracked background work.
-    await Promise.all(messages.map(message => oncePerWhatsAppMessage(message.id, async () => {
-      const reply = await generateWhatsAppReply(message.text);
-      await sendWhatsAppReply(message.from, message.id, reply);
-    })));
+    const conversations = new Map<string, typeof messages>();
+    for (const message of messages) conversations.set(message.from, [...(conversations.get(message.from) || []), message]);
+    const results = await Promise.allSettled([...conversations.values()].map(async conversation => {
+      for (const message of conversation.sort((a, b) => a.timestamp - b.timestamp)) await handleWhatsAppTriage(message);
+    }));
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure?.status === 'rejected') throw failure.reason;
     return NextResponse.json({ received: true });
   } catch (error) {
     // Do not log message text, phone numbers, request bodies, or access tokens.
-    const code = error instanceof Error && /^(GEMINI_HTTP_\d+|WHATSAPP_HTTP_\d+|WHATSAPP_DEMO_CAPACITY)$/.test(error.message)
+    const code = error instanceof Error && /^(GEMINI_HTTP_\d+|WHATSAPP_HTTP_\d+|WHATSAPP_MEMORY_[A-Z_]+|WHATSAPP_CONVERSATION_BUSY|TRIAGE_[A-Z_]+)$/.test(error.message)
       ? error.message : 'WHATSAPP_REPLY_FAILED';
-    console.error('WhatsApp demo:', code);
+    console.error('WhatsApp triage:', code);
     return NextResponse.json({ error: 'Reply could not be delivered; retry later' }, { status: 503 });
   }
 }
