@@ -1,0 +1,13 @@
+import React from 'react';
+import {whatsappMetrics,type WhatsAppTraction as Report} from '../src/whatsapp-traction';
+
+export default function WhatsAppTraction({report}:{report:Report|null}) {
+  if(!report) return <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">WhatsApp usage is unavailable. Check the WhatsApp engagement database migration.</section>;
+  const max=Math.max(1,...report.daily.map(day=>day.users));
+  return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5 sm:p-6">
+    <div><p className="text-xs font-bold uppercase tracking-widest text-emerald-700">WhatsApp</p><h3 className="mt-1 text-xl font-bold text-slate-900">Reach, repeat use, and reminders</h3><p className="mt-2 text-xs text-slate-600">Selected reporting period. These contacts are counted separately from website signups and saved triage reports.</p></div>
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{whatsappMetrics(report).map(([label,value,help])=><article key={label} className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-xs font-semibold text-slate-500">{label}</h4><p className="my-2 text-2xl font-bold text-slate-900">{value.toLocaleString('en-NG',{maximumFractionDigits:1})}</p><p className="text-xs leading-relaxed text-slate-500">{help}</p></article>)}</div>
+    <div className="rounded-xl border border-slate-200 bg-white p-4"><h4 className="text-sm font-bold text-slate-800">Daily active WhatsApp users</h4><p className="mt-1 text-xs text-slate-500">Last 14 WAT dates, within the selected reporting period.</p><div className="mt-4 overflow-x-auto"><div className="grid min-w-[650px] grid-cols-[repeat(14,minmax(0,1fr))] gap-2">{report.daily.map(day=><div key={day.date} title={`${day.date}: ${day.users} users, ${day.messages} messages`} className="text-center"><p className="mb-1 text-xs font-semibold text-slate-600">{day.users}</p><div className="flex h-20 items-end justify-center rounded bg-slate-50"><div className="w-5 rounded-t bg-emerald-500" style={{height:`${day.users?Math.max(4,day.users/max*100):0}%`}}/></div><p className="mt-2 text-[10px] text-slate-500">{day.date.slice(5)}</p></div>)}</div></div></div>
+    <p className="text-xs leading-relaxed text-slate-500">Tracking {report.trackingSince?`started ${new Date(report.trackingSince).toLocaleDateString('en-NG',{timeZone:'Africa/Lagos'})}`:'starts with the first message after this update'}. Older chats are not reconstructed. Only aggregate counts reach this view; no phone numbers, symptoms, or medication details. Reminder acceptance does not prove delivery or that medicine was taken.</p>
+  </section>;
+}

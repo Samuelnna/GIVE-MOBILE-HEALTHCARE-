@@ -67,6 +67,10 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.equal(welcome.interactive.header.image.link, 'https://mobiledoc247.com/whatsapp/getting-started.png');
   assert.ok(welcome.interactive.body.text.length <= 1024);
   for (const button of welcome.interactive.action.buttons) assert.ok(button.reply.title.length <= 20);
+  const consent=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_CONSENT);
+  assert.ok(consent.body.text.length<=1024);assert.equal(consent.action.buttons[0].reply.id,'md_consent');assert.equal(consent.action.buttons[0].reply.title,'Yes, continue');
+  const more=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_MORE);
+  assert.equal(more.type,'list');assert.equal(more.action.sections[0].rows.length,4);assert.ok(more.action.sections[0].rows.some(row=>row.id==='md_reminder'));
   assert.equal(menuContext.exports.menuReply('hello I have severe chest pain'), undefined);
   assert.equal(menuContext.exports.whatsappInteractiveReply('Seek immediate emergency care.'), undefined);
   assert.equal(menuContext.exports.menuReply('MENU').reset, false);

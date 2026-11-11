@@ -1,5 +1,7 @@
 # Admin traction overview
 
+WhatsApp now has a separate aggregate section: consenting active users, repeat active days, messages per user, website links offered, and medication reminder activity, plus a 14-day WAT chart and CSV rows. It uses `whatsapp_traction_summary` from `whatsapp_engagement_reminders.sql` after active-admin authorization. It never fetches messages, phone numbers, or medication payloads into the report. Counts start with the new tracking events, not historical chat reconstruction. See WHATSAPP_ENGAGEMENT_SETUP.md for definitions and activation.
+
 Open Admin → Traction. It loads only after that section is opened and requires an authenticated, active admin profile on the server. The browser receives aggregate metrics only, not patient identities, medical reports, payment references, or contact details. Refresh and CSV export are explicit actions.
 
 Available periods: all time, last 30 days, and last 90 days. Signups use existing Supabase Auth accounts and their registration dates; deleted accounts cannot be reconstructed. Profile counts distinguish patients, professionals, and active professionals. Repeated payment users are counted by patient ID, not number of receipts. Queries paginate past the default database row limit.

@@ -1,5 +1,7 @@
 # WhatsApp AI triage
 
+**Latest update:** see [WHATSAPP_ENGAGEMENT_SETUP.md](./WHATSAPP_ENGAGEMENT_SETUP.md) for the required additional migration, first-use consent, shorter website-oriented chats, admin usage reporting, and optional scheduled medication reminders. The original setup below describes the earlier triage foundation. Consent now gates symptom processing; it takes precedence over the earlier first-message bypass behavior.
+
 The webhook remains `/api/whatsapp/webhook`. It shares the website triage instructions: focused questions, context-aware follow-up, urgency assessment, and suggested care categories. JSON assessments are validated and formatted as readable WhatsApp replies. It does not diagnose, prescribe, book care, take payment, link phone numbers to website accounts, or access patient records. The website's existing instruction text was extracted into a shared helper without changing it.
 
 Greetings, `MENU`, `HELP`, and `HOW IT WORKS` show a branded welcome with an explanatory three-step image and three native WhatsApp reply buttons: Check symptoms, Ask health question, and Find a doctor. The image is exported from `public/whatsapp/getting-started.svg` to `public/whatsapp/getting-started.png`; deploy both with the code so Meta can fetch the PNG over HTTPS. RESET also returns this menu after clearing context. Menu content and routing are deterministic, so they do not use Gemini calls. Button/list IDs are validated against known choices; client-supplied labels are ignored. Typed button titles also work.

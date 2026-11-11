@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { supabase } from '../src/supabaseClient';
 import { getAdminTraction } from '../app/actions/admin-traction';
 import type { TractionPeriod } from '../src/traction';
+import WhatsAppTraction from './WhatsAppTraction';
+import {whatsappMetrics} from '../src/whatsapp-traction';
 
 type Report = NonNullable<Awaited<ReturnType<typeof getAdminTraction>>['report']>;
 const number = (value: number) => value.toLocaleString('en-NG');
@@ -49,6 +51,7 @@ export default function AdminTraction() {
     if (!report) return;
     const quote = (value: unknown) => `"${String(value).replace(/"/g, '""')}"`;
     const rows = [['Metric', 'Value', 'Definition'], ...metrics.map(metric => [metric.label, missing(metric.sources) ? 'Unavailable' : metric.value, metric.help]),
+      ...(report.whatsapp?whatsappMetrics(report.whatsapp).map(([label,value,help])=>[label,String(value),help]):[['WhatsApp usage','Unavailable','Database source unavailable']]),
       ['Reporting period', period === 'all' ? 'All time' : `Last ${period} days`, ''], ['Generated at', report.asOf, 'UTC timestamp'], ['Unavailable sources', report.missing.join('; '), ''], ['Reconciliation warning', report.reconciliationWarning, '']];
     const blob = new Blob(['\uFEFF' + rows.map(row => row.map(quote).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `give-traction-${period}-${report.asOf.slice(0, 10)}.csv`; link.click(); URL.revokeObjectURL(url);
@@ -70,6 +73,7 @@ export default function AdminTraction() {
         {missing([trendSource]) ? <p className="py-10 text-center text-slate-500">This data source is unavailable.</p> : <div className="mt-6 overflow-x-auto"><div className="grid min-w-[480px] grid-cols-6 gap-4">{report.chart.map(month => <div key={month.label} className="text-center"><p className="mb-2 text-xs font-bold text-slate-700">{trend === 'payments' ? naira(month[trend]) : number(month[trend])}</p><div className="flex h-36 items-end justify-center rounded-lg bg-slate-50"><div className="w-8 rounded-t-lg bg-emerald-500 sm:w-10" style={{ height: `${month[trend] ? Math.max(3, month[trend] / chartMax * 100) : 0}%` }} /></div><p className="mt-3 text-xs text-slate-500">{month.label}</p></div>)}</div></div>}
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"><h3 className="font-bold text-slate-800">Where payment volume comes from</h3><div className="mt-4 overflow-x-auto"><table className="w-full min-w-[440px] text-left text-sm"><thead className="text-xs text-slate-400"><tr><th className="pb-3">Service</th><th className="pb-3">Transactions</th><th className="pb-3 text-right">Gross NGN volume</th></tr></thead><tbody className="divide-y divide-slate-100">{!missing(['Payments']) && report.byType.map(row => <tr key={row.type}><td className="py-3 capitalize text-slate-700">{row.type.replace(/_/g, ' ')}</td><td className="py-3 text-slate-500">{number(row.count)}</td><td className="py-3 text-right font-semibold text-slate-800">{naira(row.amount)}</td></tr>)}</tbody></table>{!report.byType.length && <p className="py-5 text-sm text-slate-500">{missing(['Payments']) ? 'Payment data is unavailable.' : 'No successful NGN payments in this period.'}</p>}</div></div>
+      <WhatsAppTraction report={report.whatsapp}/>
       <p className="text-xs leading-relaxed text-slate-500">Period filters use signup, booking, order, payment, and saved-report creation dates. Completion figures show the current status of records created in the period, not the date they were completed. Professionals, patient profiles, and current carts are snapshots. Financial figures are operational metrics, not audited financial statements; historical commission changes and refunds are not reconstructed.</p>
     </>}
   </div>;

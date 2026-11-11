@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   const messages = incomingWhatsAppMessages(payload, phone);
   // Receipts and unsupported media must never trigger replies or Gemini calls.
   if (!messages.length) return NextResponse.json({ received: true });
-  if (!process.env.GEMINI_API_KEY?.trim() || !process.env.WHATSAPP_ACCESS_TOKEN?.trim()) {
+  if (!process.env.WHATSAPP_ACCESS_TOKEN?.trim()) {
     return NextResponse.json({ error: 'Reply service is not configured' }, { status: 503 });
   }
   if (messages.length > 5) return NextResponse.json({ error: 'Batch exceeds processing capacity' }, { status: 503 });

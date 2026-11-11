@@ -1,0 +1,40 @@
+const fs=require('node:fs'),vm=require('node:vm'),ts=require('typescript'),assert=require('node:assert/strict');
+const env={WHATSAPP_REMINDER_ENCRYPTION_KEY:'ab'.repeat(32),WHATSAPP_REMINDER_TEMPLATE:'medication_reminder',WHATSAPP_REMINDER_TEMPLATE_LANGUAGE:'en_US',NEXT_PUBLIC_SUPABASE_URL:'https://test.invalid',SUPABASE_SERVICE_ROLE_KEY:'test',WHATSAPP_ACCESS_TOKEN:'token',WHATSAPP_PHONE_NUMBER_ID:'123'};
+const coreContext={exports:{},require,Buffer,process:{env}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-core.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,coreContext);
+const core=coreContext.exports;
+let jobs=[],calls=[],outcomes=[],apiFail=false,active=true,consented=true;
+const workerContext={exports:{},process:{env},AbortSignal,fetch:async(url,options)=>{calls.push(JSON.parse(options.body));return{ok:!apiFail,json:async()=>({messages:[{id:'accepted'}]})};},require(name){
+  if(name==='./whatsapp-reminder-core')return core;
+  return{createClient:()=>({rpc:async(name,args)=>{if(name==='whatsapp_claim_reminders')return{data:jobs};outcomes.push(args);return{data:null};},from(table){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:table==='whatsapp_participants'?{consent_version:consented?'2026-11-v1':null}:active?{active:true}:null})};return q;}})};
+}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-worker.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,workerContext);
+function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=true;}
+(async()=>{
+  assert.equal(core.reminderReady(),true);
+  assert.deepEqual(Array.from(core.parseReminderTimes('20:00, 08:00')),[480,1200]);
+  for(const invalid of ['twice daily','8:00','24:00','12:60','08:00,08:00','08:00,'])assert.equal(core.parseReminderTimes(invalid),null);
+  assert.equal(core.nextReminderDue([480,1200],new Date('2026-11-11T07:00:00Z'),new Date('2026-11-12T23:00:00Z')),'2026-11-11T19:00:00.000Z');
+  assert.equal(core.nextReminderDue([480],new Date('2026-11-11T23:00:00Z'),new Date('2026-11-13T23:00:00Z')),'2026-11-12T07:00:00.000Z');
+  assert.equal(core.nextReminderDue([480],new Date('2026-11-11T07:01:00Z'),new Date('2026-11-11T23:00:00Z')),null);
+  const cipher=core.encryptReminder({to:'2348012345678',medicine:'Example medicine',dose:'As on label'});
+  assert.equal(cipher.includes('2348012345678'),false);assert.equal(core.decryptReminder(cipher).medicine,'Example medicine');
+  assert.throws(()=>core.decryptReminder(cipher.slice(0,-5)+'AAAAA'));
+  let result=core.reminderStep({step:'medicine'},'Example medicine');assert.equal(result.draft.step,'dose');
+  result=core.reminderStep(result.draft,'1 tablet, as labelled');assert.equal(result.draft.step,'times');
+  assert.equal(core.reminderStep(result.draft,'twice daily').draft.step,'times');
+  result=core.reminderStep(result.draft,'08:00, 20:00');assert.equal(result.draft.step,'days');
+  assert.equal(core.reminderStep(result.draft,'91').draft.step,'days');
+  result=core.reminderStep(result.draft,'7');assert.equal(result.draft.step,'confirm');assert.match(result.reply,/2 per day/);
+  assert.equal(core.reminderStep(result.draft,'yes').confirmed,undefined);assert.equal(core.reminderStep(result.draft,'CONFIRM REMINDERS').confirmed,true);
+  assert.equal(core.reminderStep(result.draft,'CANCEL').draft,null);
+  const now=Date.now();const job={id:'r1',conversation_key:'hash',lease:'lease',payload:cipher,times:[0,480,1200],next_due:new Date(now-60000).toISOString(),ends_at:new Date(now+86400000).toISOString()};
+  reset();jobs=[job];let summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.accepted,1);assert.equal(outcomes[0].outcome,'sent');
+  assert.equal(calls[0].type,'template');assert.equal(calls[0].template.components[0].parameters[0].text,'Example medicine');assert.equal(calls[0].template.components[0].parameters[1].text,'As on label');
+  reset();jobs=[job];apiFail=true;summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.failed,1);assert.equal(outcomes[0].outcome,'failed');
+  reset();jobs=[{...job,next_due:new Date(now-11*60000).toISOString()}];summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.skipped,1);assert.equal(calls.length,0);
+  reset();jobs=[job];active=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);
+  reset();jobs=[job];consented=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);
+  reset();delete env.WHATSAPP_REMINDER_TEMPLATE;summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.configured,false);assert.equal(calls.length,0);
+  console.log('PASS: exact WAT schedules, duration checks, no inferred dose/frequency, explicit opt-in, encryption/tamper rejection, approved-template payload, accepted/failed/skipped jobs, stale-dose suppression, cancellation/revocation checks, and unavailable setup. No live messages sent.');
+})().catch(error=>{console.error(error);process.exitCode=1;});

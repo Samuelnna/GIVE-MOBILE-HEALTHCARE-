@@ -2,6 +2,7 @@
 import { checkoutUser, paymentClient } from '../lib/consultation-checkout';
 import { summarizeTraction, type TractionPeriod } from '../../src/traction';
 import { reconcileGatewayPayments } from '../lib/payment-reconciliation';
+import type {WhatsAppTraction} from '../../src/whatsapp-traction';
 
 export async function getAdminTraction(token: string, period: TractionPeriod = 'all') {
   try {
@@ -47,12 +48,15 @@ export async function getAdminTraction(token: string, period: TractionPeriod = '
         if (result.data.users.length < 1000) break;
       }
     } catch { missing.push('Auth signups'); accounts = []; }
-    const [settings] = await Promise.allSettled([
+    const [settings, whatsappResult] = await Promise.allSettled([
       db.from('platform_settings').select('data').eq('id', 'commission_rates').maybeSingle(),
+      db.rpc('whatsapp_traction_summary',{report_since:period==='all'?null:new Date(Date.now()-Number(period)*86400000).toISOString()}),
     ]);
+    const whatsapp:WhatsAppTraction|null=whatsappResult.status==='fulfilled'&&!whatsappResult.value.error?whatsappResult.value.data as WhatsAppTraction:null;
+    if(!whatsapp) missing.push('WhatsApp usage');
     const rates = settings.status === 'fulfilled' && !settings.value.error ? settings.value.data?.data : null;
     if (!rates) missing.push('Commission settings (default estimates used)');
     return { success: true, report: { ...summarizeTraction({ accounts, profiles: data[0], payments: data[1], appointments: data[2],
-      orders: data[3], cart: data[4], triage: data[5], rates: rates || {}, missing }, period), reconciliationWarning } };
+      orders: data[3], cart: data[4], triage: data[5], rates: rates || {}, missing }, period), reconciliationWarning, whatsapp } };
   } catch (error) { return { success: false, error: error instanceof Error ? error.message : 'Could not load traction.' }; }
 }

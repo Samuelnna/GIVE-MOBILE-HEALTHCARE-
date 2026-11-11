@@ -1,0 +1,12 @@
+{
+  "name": "mobiledoc_medication_reminder",
+  "language": "en_US",
+  "category": "UTILITY",
+  "components": [
+    {
+      "type": "BODY",
+      "text": "You asked for a medication reminder. Medicine: {{1}}. Saved dose: {{2}}. Scheduled time: {{3}} WAT. Follow your own prescription. If this reminder is late, check your existing instructions; do not take an extra dose because of this message. Reply STOP REMINDERS to cancel. For care: https://mobiledoc247.com",
+      "example": { "body_text": [["Example medicine", "As on your label", "08:00"]] }
+    }
+  ]
+}
