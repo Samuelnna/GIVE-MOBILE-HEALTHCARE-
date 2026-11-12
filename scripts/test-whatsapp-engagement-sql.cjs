@@ -5,6 +5,10 @@ const {PGlite}=require(process.env.PGLITE_TEST_PATH||path.resolve('.codex/whatsa
   await db.exec('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS; GRANT USAGE ON SCHEMA public TO anon,authenticated,service_role;');
   await db.exec(fs.readFileSync('whatsapp_triage_memory.sql','utf8'));
   const migration=fs.readFileSync('whatsapp_engagement_reminders.sql','utf8');await db.exec(migration);await db.exec(migration);
+  // Reproduce an already deployed old database, then apply just the small fix.
+  const oldMigration=migration.replace("IF p.consent_version IS DISTINCT FROM '2026-11-v1' THEN RAISE EXCEPTION 'AI consent required'; END IF;","IF p.consent_version IS DISTINCT FROM '2026-11-v1' OR p.ai_turns>=4 THEN RAISE EXCEPTION 'AI consent or turn limit'; END IF;");
+  await db.exec(oldMigration);
+  await db.exec(fs.readFileSync('whatsapp_conversation_flow_fix.sql','utf8'));
   const session='a'.repeat(64),other='b'.repeat(64),lease='00000000-0000-4000-8000-000000000001',reminder='00000000-0000-4000-8000-000000000002';
   const call=async(op,id,changes={},key=session,clear=true)=>{
     const r=await db.query('SELECT whatsapp_engagement_turn($1,$2,$3,$4,$5,$6,$7,$8) AS result',[op,key,id,lease,'[navigation]',op==='prepare'?'Reply':null,clear,changes]);return r.rows[0].result;
@@ -39,7 +43,8 @@ const {PGlite}=require(process.env.PGLITE_TEST_PATH||path.resolve('.codex/whatsa
   await call('claim','revoke');await call('prepare','revoke',{consent:'revoke'});await call('finish','revoke');assert.equal((await call('claim','again')).consented,null);await call('release','again');
   await call('claim','other',{},other);await call('prepare','other',{consent:'accept'},other);await call('finish','other',{},other);
   for(let i=0;i<4;i++){let id='budget'+i;await call('claim',id,{},other);await call('prepare',id,{ai_used:true},other);await call('finish',id,{},other);}
-  await call('claim','over',{},other);await assert.rejects(()=>call('prepare','over',{ai_used:true},other),/turn limit/);await call('release','over',{},other);
+  for(let i=4;i<12;i++){const id='continued'+i;await call('claim',id,{},other);await call('prepare',id,{ai_used:true},other);await call('finish',id,{},other);}
+  assert.equal((await db.query('SELECT ai_turns FROM whatsapp_participants WHERE conversation_key=$1',[other])).rows[0].ai_turns,12);
   // Active days and period selection are evaluated in WAT, not host local time.
   await db.query("UPDATE whatsapp_usage_events SET created_at=now()-interval '2 days' WHERE id='budget0:usage'");
   stats=(await db.query('SELECT whatsapp_traction_summary() AS report')).rows[0].report;assert.equal(stats.repeatUsers,1);assert.equal(stats.daily.length,14);
@@ -52,5 +57,5 @@ const {PGlite}=require(process.env.PGLITE_TEST_PATH||path.resolve('.codex/whatsa
   assert.equal((await call('claim','inflight',{},other)).state,'sent');
   const stopState=await call('claim','stop-inflight',{control:'stop'},other);assert.equal(stopState.state,'claimed');
   await call('prepare','stop-inflight',{consent:'revoke',epoch:stopState.epoch},other);await call('finish','stop-inflight',{},other);
-  await db.close();console.log('PASS: actual Postgres migration/re-run, server-only access, consent, retry-safe analytics, aggregate privacy, reminder creation/leases/sending/cancellation, revocation, AI turn budget, return-day frequency, and date filtering.');
+  await db.close();console.log('PASS: old-database upgrade patch, conversations continuing beyond four replies, service-role access, consent, analytics, reminder jobs, cancellation, revocation, return-day frequency and date filtering.');
 })().catch(error=>{console.error(error);process.exit(1);});

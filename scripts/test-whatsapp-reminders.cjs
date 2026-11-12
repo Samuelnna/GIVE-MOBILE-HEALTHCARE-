@@ -13,7 +13,9 @@ function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=tru
 (async()=>{
   assert.equal(core.reminderReady(),true);
   assert.deepEqual(Array.from(core.parseReminderTimes('20:00, 08:00')),[480,1200]);
-  for(const invalid of ['twice daily','8:00','24:00','12:60','08:00,08:00','08:00,'])assert.equal(core.parseReminderTimes(invalid),null);
+  const validTimes=[['08:00 WAT',[480]],['6: 00, 18: 00',[360,1080]],['8am and 6pm',[480,1080]],['8:00',[480]],['8 a.m., 6 p.m.',[480,1080]],['12am; 12pm',[0,720]],['at 8am and 6pm daily',[480,1080]],['08:00 UTC+1',[480]],['noon & midnight',[0,720]],['０８：００ WAT',[480]]];
+  for(const [input,expected] of validTimes)assert.deepEqual(Array.from(core.parseReminderTimes(input)||[]),expected,input);
+  for(const invalid of ['twice daily','6','24:00','12:60','08:00,08:00','8am,08:00','08:00,','8am EST','8am UTC+10','0am','13pm','8am and then 6pm or something','every 8 hours',''])assert.equal(core.parseReminderTimes(invalid),null,invalid);
   assert.equal(core.nextReminderDue([480,1200],new Date('2026-11-11T07:00:00Z'),new Date('2026-11-12T23:00:00Z')),'2026-11-11T19:00:00.000Z');
   assert.equal(core.nextReminderDue([480],new Date('2026-11-11T23:00:00Z'),new Date('2026-11-13T23:00:00Z')),'2026-11-12T07:00:00.000Z');
   assert.equal(core.nextReminderDue([480],new Date('2026-11-11T07:01:00Z'),new Date('2026-11-11T23:00:00Z')),null);
@@ -25,7 +27,8 @@ function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=tru
   assert.equal(core.reminderStep(result.draft,'twice daily').draft.step,'times');
   result=core.reminderStep(result.draft,'08:00, 20:00');assert.equal(result.draft.step,'days');
   assert.equal(core.reminderStep(result.draft,'91').draft.step,'days');
-  result=core.reminderStep(result.draft,'7');assert.equal(result.draft.step,'confirm');assert.match(result.reply,/2 per day/);
+  result=core.reminderStep(result.draft,'7 days');assert.equal(result.draft.step,'confirm');assert.equal(result.draft.days,7);assert.match(result.reply,/2 per day/);
+  assert.equal(core.reminderStep({step:'days',medicine:'Example',dose:'As labelled',times:[480]},'2 weeks').draft.days,14);
   assert.equal(core.reminderStep(result.draft,'yes').confirmed,undefined);assert.equal(core.reminderStep(result.draft,'CONFIRM REMINDERS').confirmed,true);
   assert.equal(core.reminderStep(result.draft,'CANCEL').draft,null);
   const now=Date.now();const job={id:'r1',conversation_key:'hash',lease:'lease',payload:cipher,times:[0,480,1200],next_due:new Date(now-60000).toISOString(),ends_at:new Date(now+86400000).toISOString()};
@@ -36,5 +39,5 @@ function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=tru
   reset();jobs=[job];active=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);
   reset();jobs=[job];consented=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);
   reset();delete env.WHATSAPP_REMINDER_TEMPLATE;summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.configured,false);assert.equal(calls.length,0);
-  console.log('PASS: exact WAT schedules, duration checks, no inferred dose/frequency, explicit opt-in, encryption/tamper rejection, approved-template payload, accepted/failed/skipped jobs, stale-dose suppression, cancellation/revocation checks, and unavailable setup. No live messages sent.');
+  console.log('PASS: screenshot time formats, AM/PM, WAT/UTC+1, whitespace, duration phrases, invalid/ambiguous time rejection, explicit opt-in, encryption, template payload, accepted/failed/skipped jobs, stale-dose suppression, cancellation and revocation. No live messages sent.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -12,14 +12,14 @@ export const WHATSAPP_CHOICES = {
 export type WhatsAppChoice = keyof typeof WHATSAPP_CHOICES;
 
 export const WHATSAPP_PRIVACY_NOTICE = 'Recent messages are kept for follow-up for up to 24 hours of inactivity. Send RESET to clear this conversation. Avoid sharing identifying details.';
-export const WHATSAPP_CONSENT = '*Welcome to MobileDoc* 👋\nYour AI health assistant on WhatsApp.\n\nI can help with brief symptom guidance, health questions, and medication reminders you set. Most care continues at https://mobiledoc247.com\n\nWith your permission, your messages are processed using AI and recent chat context is kept for follow-up for 24 hours of inactivity. We measure usage without showing your messages in admin analytics. Reminder messages need separate confirmation.\n\nAI guidance is not a diagnosis. For an emergency, seek immediate care; do not wait for this chat.\n\nPrivacy: https://mobiledoc247.com/privacy-policy\n\nChoose *Yes, continue* to agree, or *No thanks*. STOP withdraws permission and cancels reminders.';
+export const WHATSAPP_CONSENT = "👋 Hi there! I'm MobileDoc, your friendly AI health assistant on WhatsApp.\n\nI can help you:\n✅ Understand your symptoms\n✅ Get answers to health questions\n✅ Set your medication reminders\n✅ Find a doctor through MobileDoc\n\nYour privacy is our top priority.\nShall we get you set up?";
 export const WHATSAPP_DECLINED = 'No problem. AI chat is paused and any saved reminders have been cancelled. You can use https://mobiledoc247.com for care. Send HELLO if you want to review consent again.';
 export const WHATSAPP_HANDOFF = 'Let’s continue your care at https://mobiledoc247.com — sign in to choose a healthcare professional. This chat gives brief guidance, not a diagnosis.\n\nIf you may be in immediate danger, seek emergency care now rather than waiting for an online consultation. You can still send MENU to manage reminders.';
 export const WHATSAPP_MORE = '*More ways MobileDoc can help*\nChoose below, or continue your care at https://mobiledoc247.com\n\nMedication reminders repeat only the schedule you enter. STOP REMINDERS cancels them.';
-export const WHATSAPP_WELCOME = "👋 *Welcome to MobileDoc*\nYour AI health assistant on WhatsApp.\n\nI can help you:\n• Understand your symptoms\n• Ask general health questions\n• Find care through our website\n\nChoose an option below, or describe what is bothering you.\n\nAI guidance, not a diagnosis. Send MENU to see these options again.";
-export const WHATSAPP_RESET = "Your previous symptom conversation has been cleared.\n\n👋 *Welcome back to MobileDoc*\nChoose where to start, or describe your symptoms.\n\nAI guidance, not a diagnosis. Send MENU for these options.";
-export const WHATSAPP_SYMPTOMS = '*Let’s check your symptoms*\n\nWhat symptoms are you experiencing? You can write in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa.\n\nI’ll ask a few focused questions and help you understand the next step. You can describe symptoms directly at any time.';
-export const WHATSAPP_QUESTION = '*What would you like to know?*\n\nAsk your health question in your own words. I can explain general health information; for personal symptoms, I’ll help assess what care may be needed.\n\nSend MENU to change options.';
+export const WHATSAPP_WELCOME = "😊 *Welcome to MobileDoc!*\nI'm glad you're here. How can I help you today?\n\nTell me how you're feeling, ask a health question, or choose an option below. We can take it one step at a time.";
+export const WHATSAPP_RESET = "All fresh 😊 Your earlier chat has been cleared.\n\nHow can I help you today?";
+export const WHATSAPP_SYMPTOMS = "I'm here to help 😊 What symptoms are you experiencing?\n\nYou can tell me in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa.";
+export const WHATSAPP_QUESTION = "Of course 😊 Ask your health question, and we'll talk it through.";
 export const WHATSAPP_DOCTOR = '*Find a doctor with MobileDoc*\n\n1. Open https://mobiledoc247.com\n2. Sign in or create an account.\n3. Choose a healthcare professional and follow the consultation steps.\n\nI haven’t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care rather than waiting for an online booking.\n\nYou can also check symptoms or ask a health question here.';
 
 export function knownWhatsAppChoice(value: unknown): WhatsAppChoice | undefined {
@@ -46,9 +46,8 @@ export function menuReply(text: string, selection?: WhatsAppChoice) {
 // adding transport metadata or a second migration to the conversation database.
 export function whatsappInteractiveReply(text: string) {
   const buttons = (ids: WhatsAppChoice[]) => ids.map(id => ({ type: 'reply', reply: { id, title: WHATSAPP_CHOICES[id].title } }));
-  if (text === WHATSAPP_CONSENT) return { type: 'button', body: { text }, footer: { text: 'Your choice • MobileDoc' },
-    header: { type: 'image', image: { link: 'https://mobiledoc247.com/whatsapp/getting-started.png' } },
-    action: { buttons: buttons(['md_consent', 'md_decline']) } };
+  if (text === WHATSAPP_CONSENT) return { type: 'button', body: { text },
+    action: { buttons: buttons(['md_consent']) } };
   if (text.startsWith('*Confirm your reminder*')) return { type: 'button', body: { text: text.slice(0, 1024) },
     action: { buttons: buttons(['md_reminder_confirm', 'md_reminder_cancel']) } };
   const mainMenu = text === WHATSAPP_WELCOME || text.startsWith(WHATSAPP_WELCOME + '\n\n') ||

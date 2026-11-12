@@ -104,7 +104,7 @@ BEGIN
         UPDATE public.whatsapp_participants SET wizard=NULL WHERE conversation_key=session_key;
       END IF;
       IF COALESCE((changes->>'ai_used')::boolean,false) THEN
-        IF p.consent_version IS DISTINCT FROM '2026-11-v1' OR p.ai_turns>=4 THEN RAISE EXCEPTION 'AI consent or turn limit'; END IF;
+        IF p.consent_version IS DISTINCT FROM '2026-11-v1' THEN RAISE EXCEPTION 'AI consent required'; END IF;
         UPDATE public.whatsapp_participants SET ai_turns=ai_turns+1,
           ai_window_until=CASE WHEN ai_window_until>now() THEN ai_window_until ELSE now()+interval '24 hours' END WHERE conversation_key=session_key;
         INSERT INTO public.whatsapp_usage_events(id,conversation_key,kind) VALUES(inbound_id||':ai',session_key,'ai_reply') ON CONFLICT DO NOTHING;

@@ -30,7 +30,8 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
 (async () => {
   reset(); await handle(message);
   assert.deepEqual(operations.map(op => op.operation), ['claim', 'prepare', 'finish']);
-  assert.match(replies[0].reply, /https:\/\/mobiledoc247.com/);
+  assert.equal(replies[0].reply,'How long have you had the headache?');
+  assert.equal(replies[0].reply.includes('https://'),false);
   assert.equal(operations[0].session_key.length, 64); assert.equal(operations[0].session_key.includes(message.from), false);
   assert.notEqual(key(message.from), key('2348099999999'));
   const firstKey = key(message.from); env.WHATSAPP_PHONE_NUMBER_ID = 'another'; assert.notEqual(firstKey, key(message.from)); env.WHATSAPP_PHONE_NUMBER_ID = '12345';
@@ -56,13 +57,20 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   assert.equal(operations[1].changes.consent,'accept'); assert.equal(generated.length,0);
   reset(); await handle({...message,text:'STOP'}); assert.equal(operations[1].changes.consent,'revoke'); assert.equal(operations[1].changes.stop_reminders,true);
   reset(); await handle({...message,text:'STOP REMINDERS'}); assert.equal(operations[1].changes.stop_reminders,true); assert.equal(generated.length,0);
-  reset(); claim.ai_turns=4; await handle(message); assert.equal(generated.length,0); assert.equal(replies[0].reply,menuContext.exports.WHATSAPP_HANDOFF);
+  for(const previousTurns of [4,5,30,100]){
+    reset();claim.ai_turns=previousTurns;await handle(message);assert.equal(generated.length,1);assert.equal(replies[0].reply,'How long have you had the headache?');
+  }
   reset(); await handle({...message,text:'Medication reminders',selection:'md_reminder'}); assert.match(replies[0].reply,/not available yet/); assert.equal(generated.length,0);
   env.WHATSAPP_REMINDER_ENCRYPTION_KEY='ab'.repeat(32); env.WHATSAPP_REMINDER_TEMPLATE='medication_reminder';env.WHATSAPP_REMINDER_TEMPLATE_LANGUAGE='en_US';
   reset(); await handle({...message,text:'Medication reminders',selection:'md_reminder'}); assert.match(replies[0].reply,/medicine name/);
   assert.equal(reminderContext.exports.decryptReminder(operations[1].changes.wizard).step,'medicine');
   reset(); claim.wizard=reminderContext.exports.encryptReminder({step:'medicine'});await handle({...message,text:'Example drug'});
   assert.equal(generated.length,0); assert.equal(operations[1].clear_history,true);assert.equal(operations[1].user_text.includes('drug'),false);
+  for(const [input,expected] of [['08:00 WAT',[480]],['6: 00, 18: 00',[360,1080]]]){
+    reset();claim.wizard=reminderContext.exports.encryptReminder({step:'times',medicine:'Example medicine',dose:'As labelled'});
+    await handle({...message,text:input});const nextDraft=reminderContext.exports.decryptReminder(operations[1].changes.wizard);
+    assert.equal(nextDraft.step,'days');assert.deepEqual(Array.from(nextDraft.times),expected);assert.equal(generated.length,0);
+  }
   reset();claim.wizard=reminderContext.exports.encryptReminder({step:'confirm',medicine:'Example medicine',dose:'As labelled',times:[480,1200],days:7});
   await handle({...message,text:'CONFIRM REMINDERS',selection:'md_reminder_confirm'});
   assert.equal(generated.length,0);assert.equal(operations[1].changes.wizard,null);
@@ -71,5 +79,5 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   reset(); generationFail = true; await assert.rejects(() => handle(message), /GEMINI_HTTP_429/); assert.equal(operations.at(-1).operation, 'release'); assert.equal(replies.length, 0);
   reset(); sendFail = true; await assert.rejects(() => handle(message), /WHATSAPP_HTTP_500/); assert.equal(operations[1].operation, 'prepare'); assert.equal(operations.at(-1).operation, 'release');
   reset(); memoryFail = true; await assert.rejects(() => handle(message), /MEMORY_SETUP_REQUIRED/); assert.equal(generated.length, 0);
-  console.log('PASS: memory, sender isolation, retries, consent/no-AI-before-acceptance, revocation, turn cap, website handoff, unavailable reminders, encrypted setup, confirmed schedule creation, reset, failures, and missing migration. No live messages sent.');
+  console.log('PASS: natural follow-up without appended links, ongoing conversations beyond the former cutoff, memory, consent, revocation, unavailable reminders, encrypted setup, confirmed schedules, retries, and failures. No live messages sent.');
 })().catch(error => { console.error(error); process.exitCode = 1; });

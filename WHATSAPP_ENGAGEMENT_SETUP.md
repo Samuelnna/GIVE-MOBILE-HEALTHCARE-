@@ -1,5 +1,13 @@
 # WhatsApp consent, traction, and medication reminders
 
+## Conversation update — 12 November 2026
+
+For an installation that already has the engagement migration, run **`whatsapp_conversation_flow_fix.sql`** and deploy the changed application files. This small SQL patch replaces the turn function to remove the previous database reply cutoff. It preserves existing consent, metrics, chat, reminder schedules, and access controls. New installations can use the now-updated `whatsapp_engagement_reminders.sql` directly.
+
+WhatsApp conversations now continue without a fixed reply or question count. The assistant uses prior answers, asks useful follow-up questions, and offers the website when a care/service next step is relevant. Links are no longer appended to every answer. The first greeting is friendly with a short consent question and one Yes, continue button. Existing accepted consent still applies; testing a fresh consent screen requires a new contact or withdrawing consent with STOP (which also cancels that contact's reminders).
+
+Reminder times accept `08:00 WAT`, `6: 00, 18: 00`, `8am and 6pm`, and similar explicit clock times. The confirmation displays normalized WAT times before anything is saved. Dose, time, duration, confirmation, and retry messages are conversational. Bare numbers/frequencies that do not specify a clock time still need clarification. Medication times are never inferred from a frequency alone.
+
 ## Deploy consent and traction
 
 1. The previously deployed `whatsapp_triage_memory.sql` is a prerequisite. Run the new **`whatsapp_engagement_reminders.sql`** in Supabase SQL Editor. It can be rerun safely. No existing healthcare, appointment, or payment tables are changed.
@@ -31,9 +39,9 @@ The consent/menu/traction update works without reminder configuration. Until the
 ## Patient flow
 
 - HELLO → consent introduction → **Yes, continue** → menu.
-- Check symptoms → a few focused replies → website next step. Health-question replies are short. AI replies are limited to four per rolling 24-hour allowance; navigation and reminder controls remain available afterward. Emergency guidance is not followed by an online-booking link.
+- Check symptoms → a natural conversation with relevant follow-up questions → an assessment when enough information is available. Health-question replies stay readable and the chat can continue. There is no fixed AI reply allowance or question count. Website links are offered for relevant care/service next steps, rather than appended to questions. Emergency guidance is not redirected through online booking.
 - **More options → Medication reminders**, or type REMINDERS.
-- Enter the medicine from the existing prescription/label → its existing dose → exact 24-hour WAT times separated by commas (1–6/day) → number of days (1–90, starting today).
+- Enter the medicine from the existing prescription/label → its existing dose → explicit clock times in WAT (for example `8am and 6pm`, `08:00 WAT`, or `6: 00, 18: 00`; 1–6/day) → duration (for example `7 days` or `2 weeks`, up to 90 days, starting today).
 - Review the saved drug, dose, times, frequency, duration, notification visibility, and separate reminder opt-in. Tap **Confirm reminders** or type CONFIRM REMINDERS. “Yes” alone does not activate medication reminders. CANCEL discards setup; STOP REMINDERS removes all saved schedules. Up to 10 active schedules per contact.
 - Schedules use **Nigeria time, WAT/UTC+1**; other time zones and as-needed medication are not supported. The bot never calculates dosage, frequency, duration, or clock times from vague instructions. Patients must use their own clinician/pharmacist instructions and another reliable plan when reminders are unavailable.
 

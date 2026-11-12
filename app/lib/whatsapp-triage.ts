@@ -2,7 +2,7 @@ import 'server-only';
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, randomUUID } from 'node:crypto';
 import { generateWhatsAppReply, sendWhatsAppReply, type IncomingMessage, type TriageMessage } from './whatsapp';
-import { menuReply, WHATSAPP_CONSENT, WHATSAPP_DECLINED, WHATSAPP_HANDOFF, WHATSAPP_WELCOME } from './whatsapp-menu';
+import { menuReply, WHATSAPP_CONSENT, WHATSAPP_DECLINED, WHATSAPP_WELCOME } from './whatsapp-menu';
 import { reminderReady, reminderStep, REMINDER_START, REMINDER_UNAVAILABLE, encryptReminder, decryptReminder, nextReminderDue, type ReminderDraft } from './whatsapp-reminder-core';
 
 export function whatsappConversationKey(sender: string) {
@@ -42,7 +42,7 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
       if (/^(?:stop|forget me)$/i.test(text) || message.selection==='md_decline' || /^no thanks$/i.test(text)) {
         reply=WHATSAPP_DECLINED; clear=true; changes.consent='revoke'; changes.stop_reminders=true; changes.wizard=null;
       } else if (/^stop reminders$/i.test(text)) {
-        reply='All your medication reminders have been cancelled and their saved details removed. For care: https://mobiledoc247.com\n\nSend MENU for other options.';
+        reply="Done 😊 I've cancelled your medication reminders. Send REMINDERS whenever you'd like to set a new one.";
         clear=true; changes.stop_reminders=true; changes.wizard=null;
       } else if (!state.consented) {
         clear=true;
@@ -50,7 +50,7 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
           changes.consent='accept'; reply=WHATSAPP_WELCOME;
         } else reply=WHATSAPP_CONSENT;
       } else if (navigation?.reset) {
-        reply=navigation.text+'\n\nYour existing reminders are unchanged. STOP REMINDERS cancels them.';
+        reply=navigation.text+(Number(state.reminder_count)>0?'\n\nYour reminders are still on. Send STOP REMINDERS if you want to cancel them.':'');
         clear=true; changes.wizard=null;
       } else if(message.selection==='md_consent'||/^yes,? continue$/i.test(text)) {
         reply=WHATSAPP_WELCOME;changes.wizard=null;
@@ -78,15 +78,12 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
           }
         }
       } else if(!state.wizard && (/^(?:confirm reminders|cancel)$/i.test(text)||message.selection==='md_reminder_confirm'||message.selection==='md_reminder_cancel')) {
-        reply='There is no active reminder setup to confirm or cancel. No new reminder was saved. Send REMINDERS to start, or STOP REMINDERS to remove existing schedules. For care: https://mobiledoc247.com';
+        reply="There's no reminder waiting to be confirmed right now. Send REMINDERS and I'll help you set one up. STOP REMINDERS cancels any reminders already saved.";
       } else if (navigation) {
         reply=navigation.text; changes.wizard=null;
-      } else if (Number(state.ai_turns)>=4) {
-        reply=WHATSAPP_HANDOFF; changes.handoff=true;
       } else {
         reply=await generateWhatsAppReply(message.text,history);
         changes.ai_used=true;
-        if(!/\b(?:Emergency care|emergency services|emergency department|seek immediate)\b/i.test(reply) && !reply.includes('https://mobiledoc247.com')) reply+='\n\nContinue your care: https://mobiledoc247.com';
       }
       if(reply.includes('https://mobiledoc247.com')) changes.handoff=true;
       await turn('prepare', { user_text: clear ? '[navigation or consent]' : message.text, reply_text: reply, clear_history: clear, changes });

@@ -50,7 +50,10 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.equal(generation.contents.length, 3);
   assert.equal(generation.contents[0].parts[0].text, 'I have a headache');
   assert.equal(generation.contents[2].parts[0].text, 'Two days');
-  assert.ok(generation.systemInstruction.parts[0].text.includes(promptContext.exports.triageInstructions()));
+  assert.ok(generation.systemInstruction.parts[0].text.includes(promptContext.exports.triageInstructions('Auto-detect','whatsapp')));
+  assert.equal(generation.systemInstruction.parts[0].text.includes('Normally ask up to 3'),false);
+  assert.match(generation.systemInstruction.parts[0].text,/no question count/);
+  assert.match(generation.systemInstruction.parts[0].text,/Never add a website link to an ordinary follow-up/);
   assert.match(generation.systemInstruction.parts[0].text, /Never route an emergency through a booking/);
   const assessment = api.formatWhatsAppAssessment(JSON.stringify({ triageLevel: 'Urgent', symptomSummary: 'A persistent headache.',
     recommendedAction: 'Speak to a clinician today.', referrals: [{ type: 'Doctor', reason: 'Clinical assessment.' }] }));
@@ -69,6 +72,9 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   for (const button of welcome.interactive.action.buttons) assert.ok(button.reply.title.length <= 20);
   const consent=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_CONSENT);
   assert.ok(consent.body.text.length<=1024);assert.equal(consent.action.buttons[0].reply.id,'md_consent');assert.equal(consent.action.buttons[0].reply.title,'Yes, continue');
+  assert.equal(consent.action.buttons.length,1);assert.equal(consent.header,undefined);
+  assert.match(consent.body.text,/Your privacy is our top priority\.\nShall we get you set up\?/);
+  assert.equal(consent.body.text.includes('https://'),false);
   const more=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_MORE);
   assert.equal(more.type,'list');assert.equal(more.action.sections[0].rows.length,4);assert.ok(more.action.sections[0].rows.some(row=>row.id==='md_reminder'));
   assert.equal(menuContext.exports.menuReply('hello I have severe chest pain'), undefined);
