@@ -25,11 +25,17 @@ export async function doctorReferral(requested: unknown, urgent = false) {
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!url || !key) throw new Error('DIRECTORY_UNAVAILABLE');
     const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { data, error } = await db.from('profiles').select('id, full_name, specialty, role')
+    const load = (fields: string) => db.from('profiles').select(fields)
       .eq('user_type', 'professional').eq('status', 'active').order('id').limit(1000)
       .abortSignal(AbortSignal.timeout(4000));
+    let { data, error } = await load('id, full_name, specialty, role');
+    // Older production schemas store the specialty in role only.
+    if (error?.code === '42703') {
+      const legacy = await load('id, full_name, role');
+      data = legacy.data; error = legacy.error;
+    }
     if (error) throw error;
-    const doctors = (data || []).filter((d: Doctor) => d.full_name && /^[0-9a-f-]{36}$/i.test(d.id));
+    const doctors = (data as unknown as Doctor[] || []).filter((d: Doctor) => d.full_name && /^[0-9a-f-]{36}$/i.test(d.id));
     let matches = doctors.filter((d: Doctor) => specialties[specialty].test(d.specialty || d.role || ''));
     const fallback = matches.length === 0 && specialty !== 'General Practice';
     if (fallback) matches = doctors.filter((d: Doctor) => specialties['General Practice'].test(d.specialty || d.role || ''));
