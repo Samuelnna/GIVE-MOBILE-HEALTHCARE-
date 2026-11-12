@@ -20,7 +20,7 @@ export const WHATSAPP_WELCOME = "😊 *Welcome to MobileDoc!*\nI'm glad you're h
 export const WHATSAPP_RESET = "All fresh 😊 Your earlier chat has been cleared.\n\nHow can I help you today?";
 export const WHATSAPP_SYMPTOMS = "I'm here to help 😊 What symptoms are you experiencing?\n\nYou can tell me in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa.";
 export const WHATSAPP_QUESTION = "Of course 😊 Ask your health question, and we'll talk it through.";
-export const WHATSAPP_DOCTOR = '*Find a doctor with MobileDoc*\n\n1. Open https://mobiledoc247.com\n2. Sign in or create an account.\n3. Choose a healthcare professional and follow the consultation steps.\n\nI haven’t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care rather than waiting for an online booking.\n\nYou can also check symptoms or ask a health question here.';
+export const WHATSAPP_DOCTOR = '*Let\u2019s find the right doctor for you*\n\nWhat would you like help with, or which specialist are you looking for? I can suggest a suitable doctor from our network.\n\nYou can also browse and book here: https://mobiledoc247.com/?care=doctors\n\nI haven\u2019t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care.';
 
 export function knownWhatsAppChoice(value: unknown): WhatsAppChoice | undefined {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(WHATSAPP_CHOICES, value)

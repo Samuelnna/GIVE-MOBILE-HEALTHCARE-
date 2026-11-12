@@ -12,6 +12,7 @@ export default function Page() {
 
   useEffect(() => {
     setHasSession(Boolean(localStorage.getItem('currentUser')));
+    if (new URLSearchParams(window.location.search).get('care') === 'doctors') setShowAuth(true);
     setIsCheckingSession(false);
   }, []);
 

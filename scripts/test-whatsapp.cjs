@@ -11,7 +11,7 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-menu.ts'
 }).outputText, menuContext);
 const context = { exports: {}, Buffer, Date, Map, Promise, AbortSignal, process: { env: {
   GEMINI_API_KEY: 'test-gemini', WHATSAPP_ACCESS_TOKEN: 'test-meta', WHATSAPP_PHONE_NUMBER_ID: '123456',
-} }, require: name => name === 'server-only' ? {} : name === './triage-instructions' ? promptContext.exports : name === './whatsapp-menu' ? menuContext.exports : require(name),
+} }, require: name => name === './whatsapp-doctor-referral' ? { doctorReferral: async () => 'Directory link' } : name === 'server-only' ? {} : name === './triage-instructions' ? promptContext.exports : name === './whatsapp-menu' ? menuContext.exports : require(name),
 fetch: async (url, options) => {
   calls.push({ url, options });
   return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: 'Hello!' }] } }] }) };
@@ -82,6 +82,11 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.equal(menuContext.exports.menuReply('MENU').reset, false);
   assert.equal(menuContext.exports.menuReply('RESET').reset, true);
   assert.match(menuContext.exports.menuReply('Find a doctor').text, /https:\/\/mobiledoc247.com/);
+  for (const level of ['Routine', 'Urgent', 'Emergency']) {
+    context.fetch = async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ triageLevel: level, symptomSummary: 'Skin concern', recommendedAction: 'Seek suitable care', doctorSpecialty: 'Dermatology', referrals: [{ type: 'Doctor', reason: 'Assessment' }] }) }] } }] }) });
+    const routed = await api.generateWhatsAppReply('Please help me find a doctor');
+    assert.equal(routed.includes('Directory link'), level !== 'Emergency');
+  }
   context.fetch = async () => ({ ok: false, status: 401 });
   await assert.rejects(() => api.sendWhatsAppReply(message.from, message.id, 'hello'), /WHATSAPP_HTTP_401/);
   await assert.rejects(() => api.generateWhatsAppReply('hello'), /GEMINI_HTTP_401/);

@@ -17,6 +17,7 @@ SAFETY:
 - For Urgent or Routine cases, recommend the appropriate service and explain why in one sentence.
 
 CARE ROUTING:
+${channel==='whatsapp'?'For a Doctor referral include doctorSpecialty using one of: General Practice, Paediatrics, Obstetrics and Gynaecology, Dermatology, Cardiology, Mental Health, Dentistry, ENT, Ophthalmology, Orthopaedics, Neurology, Urology, Gastroenterology, Endocrinology. Choose based on the assessment, not an assumed diagnosis. Prefer General Practice when unclear. When directly asked for a doctor or specialist, ask about the concern if unclear; once clear return the structured recommendation so the application can match a real doctor. Never route emergencies to online booking.':''}
 - Doctor: diagnosis, clinical assessment, symptoms needing a clinician, or medication questions.
 - Hospital: emergency symptoms, severe deterioration, procedures, admission, or in-person evaluation.
 - Laboratory: a test or result is needed to guide care.
@@ -29,6 +30,7 @@ When enough information is available, return JSON only. Do not wrap it in Markdo
   "symptomSummary": "Brief plain-language summary, maximum 40 words",
   "recommendedAction": "The clearest immediate next step, maximum 60 words",
   "generatedReport": "Concise report for a healthcare professional, maximum 120 words",
+  ${channel==='whatsapp'?'"doctorSpecialty": "One allowed specialty category",':''}
   "referrals": [{"type": "Doctor" | "Hospital" | "Laboratory" | "Pharmacy", "reason": "One-sentence reason"}]
 }
 

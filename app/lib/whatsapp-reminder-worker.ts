@@ -9,7 +9,7 @@ export async function runMedicationReminders() {
   const db=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:jobs,error}=await db.rpc('whatsapp_claim_reminders',{batch_size:5});
   if(error) throw new Error('REMINDER_CLAIM_FAILED');
-  const summary={configured:true,accepted:0,failed:0,skipped:0};
+  const summary={configured:true,accepted:0,failed:0,skipped:0,errors:{} as Record<string,number>};
   const results=await Promise.allSettled((jobs||[]).map(async job=>{
     const now=new Date(),next=nextReminderDue(job.times,now,new Date(job.ends_at));
     const finish=async(outcome:string)=>{
@@ -26,9 +26,11 @@ export async function runMedicationReminders() {
     ]);
     if(active.error||participant.error) throw new Error('REMINDER_RECHECK_FAILED');
     if(!active.data?.active||participant.data?.consent_version!=='2026-11-v1') { await finish('skipped'); summary.skipped++; return; }
+    let stage:'decrypt'|'send'='decrypt';
     try {
       const saved=decryptReminder(job.payload);
       if(!/^\d{5,20}$/.test(saved.to)||typeof saved.medicine!=='string'||typeof saved.dose!=='string') throw new Error('REMINDER_DATA_INVALID');
+      stage='send';
       const dueWAT=new Date(Date.parse(job.next_due)+3600000);
       const time=formatReminderTimes([dueWAT.getUTCHours()*60+dueWAT.getUTCMinutes()]);
       const response=await fetch(`https://graph.facebook.com/${process.env.WHATSAPP_GRAPH_VERSION||'v24.0'}/${encodeURIComponent(phone)}/messages`,{
@@ -37,10 +39,21 @@ export async function runMedicationReminders() {
           language:{code:process.env.WHATSAPP_REMINDER_TEMPLATE_LANGUAGE},components:[{type:'body',parameters:[saved.medicine,saved.dose,time].map(text=>({type:'text',text}))}]}}),
         signal:AbortSignal.timeout(10000),
       });
-      if(!response.ok) throw new Error('REMINDER_SEND_FAILED');
+      if(!response.ok) {
+        // Meta's numeric codes identify template, language, token and account
+        // failures. Do not log its raw body: it can echo recipient/payload data.
+        const details=await response.json().catch(()=>null);
+        const errorCode=Number.isSafeInteger(details?.error?.code)?details.error.code:0;
+        const subcode=Number.isSafeInteger(details?.error?.error_subcode)?details.error.error_subcode:0;
+        throw new Error(`REMINDER_META_HTTP_${response.status}_CODE_${errorCode}_SUBCODE_${subcode}`);
+      }
       const body=await response.json();
       if(!body.messages?.[0]?.id) throw new Error('REMINDER_SEND_UNCONFIRMED');
-    } catch {
+    } catch(error) {
+      const code=error instanceof Error && /^REMINDER_(?:META_HTTP_\d+_CODE_\d+_SUBCODE_\d+|DATA_INVALID|SEND_UNCONFIRMED)$/.test(error.message)
+        ? error.message : stage==='decrypt'?'REMINDER_DECRYPT_FAILED':'REMINDER_NETWORK_FAILED';
+      summary.errors[code]=(summary.errors[code]||0)+1;
+      console.error('WhatsApp medication reminder failed',{code});
       await finish('failed'); summary.failed++; return;
     }
     // If this write fails after Meta accepts the send, leave the lease intact.

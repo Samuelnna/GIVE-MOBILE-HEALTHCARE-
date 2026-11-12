@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Doctor } from '../types';
 import { PhoneIcon, VideoCameraIcon } from '../components/IconComponents';
 import BookAppointmentModal from '../components/BookAppointmentModal';
@@ -75,6 +75,14 @@ interface DoctorsProps {
 
 const Doctors: React.FC<DoctorsProps> = ({ doctors, onMessageProfessional, onBookAppointment }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [referralApplied, setReferralApplied] = useState(false);
+  useEffect(() => {
+    if (referralApplied || !doctors.length) return;
+    const id = new URLSearchParams(window.location.search).get('doctor');
+    const referred = doctors.find(d => String(d.id) === id);
+    if (referred) setSearchTerm(referred.name);
+    setReferralApplied(true);
+  }, [doctors, referralApplied]);
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [selectedProfessionalType, setSelectedProfessionalType] = useState<'All Professionals' | 'Doctors' | 'Nurses' | 'Pharmacists' | 'Lab Scientists'>('All Professionals');
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);

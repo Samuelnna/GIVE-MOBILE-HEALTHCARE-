@@ -3,13 +3,13 @@ const env={WHATSAPP_REMINDER_ENCRYPTION_KEY:'ab'.repeat(32),WHATSAPP_REMINDER_TE
 const coreContext={exports:{},require,Buffer,process:{env}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-core.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,coreContext);
 const core=coreContext.exports;
-let jobs=[],calls=[],outcomes=[],apiFail=false,active=true,consented=true;
-const workerContext={exports:{},process:{env},AbortSignal,fetch:async(url,options)=>{calls.push(JSON.parse(options.body));return{ok:!apiFail,json:async()=>({messages:[{id:'accepted'}]})};},require(name){
+let jobs=[],calls=[],outcomes=[],apiFail=false,active=true,consented=true,logs=[];
+const workerContext={exports:{},process:{env},AbortSignal,console:{error:(_message,details)=>logs.push(details)},fetch:async(url,options)=>{calls.push(JSON.parse(options.body));return{ok:!apiFail,status:apiFail?400:200,json:async()=>apiFail?{error:{code:132001,message:'PRIVATE RECIPIENT AND MEDICATION DETAILS'}}:({messages:[{id:'accepted'}]})};},require(name){
   if(name==='./whatsapp-reminder-core')return core;
   return{createClient:()=>({rpc:async(name,args)=>{if(name==='whatsapp_claim_reminders')return{data:jobs};outcomes.push(args);return{data:null};},from(table){const q={select(){return q;},eq(){return q;},maybeSingle:async()=>({data:table==='whatsapp_participants'?{consent_version:consented?'2026-11-v1':null}:active?{active:true}:null})};return q;}})};
 }};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-worker.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,workerContext);
-function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=true;}
+function reset(){jobs=[];calls=[];outcomes=[];logs=[];apiFail=false;active=consented=true;}
 (async()=>{
   assert.equal(core.reminderReady(),true);
   assert.deepEqual(Array.from(core.parseReminderTimes('20:00, 08:00')),[480,1200]);
@@ -35,6 +35,9 @@ function reset(){jobs=[];calls=[];outcomes=[];apiFail=false;active=consented=tru
   reset();jobs=[job];let summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.accepted,1);assert.equal(outcomes[0].outcome,'sent');
   assert.equal(calls[0].type,'template');assert.equal(calls[0].template.components[0].parameters[0].text,'Example medicine');assert.equal(calls[0].template.components[0].parameters[1].text,'As on label');
   reset();jobs=[job];apiFail=true;summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.failed,1);assert.equal(outcomes[0].outcome,'failed');
+  assert.equal(summary.errors.REMINDER_META_HTTP_400_CODE_132001_SUBCODE_0,1);
+  assert.equal(JSON.stringify(logs).includes('PRIVATE'),false);assert.equal(JSON.stringify(logs).includes('2348012345678'),false);
+  reset();jobs=[{...job,payload:'invalid'}];summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.errors.REMINDER_DECRYPT_FAILED,1);assert.equal(calls.length,0);
   reset();jobs=[{...job,next_due:new Date(now-11*60000).toISOString()}];summary=await workerContext.exports.runMedicationReminders();assert.equal(summary.skipped,1);assert.equal(calls.length,0);
   reset();jobs=[job];active=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);
   reset();jobs=[job];consented=false;await workerContext.exports.runMedicationReminders();assert.equal(calls.length,0);

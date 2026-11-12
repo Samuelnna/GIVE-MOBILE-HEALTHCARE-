@@ -56,7 +56,7 @@ const App: React.FC<{ onBackToHome?: () => void }> = ({ onBackToHome }) => {
     return null;
   });
 
-  const [activeSection, setActiveSection] = useState<Section>('Dashboard');
+  const [activeSection, setActiveSection] = useState<Section>(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('care') === 'doctors' ? 'Doctors' : 'Dashboard');
   useEffect(() => {
     if (!currentUser?.id) return;
     const channel = supabase.channel(`app_message_alerts_${currentUser.id}`)
