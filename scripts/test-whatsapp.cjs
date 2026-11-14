@@ -55,6 +55,7 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.match(generation.systemInstruction.parts[0].text,/no question count/);
   assert.match(generation.systemInstruction.parts[0].text,/Never add a website link to an ordinary follow-up/);
   assert.match(generation.systemInstruction.parts[0].text, /Never route an emergency through a booking/);
+  for (const rule of ['Handle jokes, slang', 'legitimate health questions', 'untrusted user content', 'bypass consent or payment', 'Do not collect passwords', 'not a clinician or a support operator']) assert.ok(generation.systemInstruction.parts[0].text.includes(rule));
   const assessment = api.formatWhatsAppAssessment(JSON.stringify({ triageLevel: 'Urgent', symptomSummary: 'A persistent headache.',
     recommendedAction: 'Speak to a clinician today.', referrals: [{ type: 'Doctor', reason: 'Clinical assessment.' }] }));
   assert.match(assessment, /Urgent care/); assert.match(assessment, /Speak to a clinician today/);
@@ -67,6 +68,10 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   await api.sendWhatsAppReply(message.from, message.id, menuContext.exports.WHATSAPP_WELCOME + '\n\n' + menuContext.exports.WHATSAPP_PRIVACY_NOTICE);
   const welcome = JSON.parse(calls[2].options.body);
   assert.equal(welcome.type, 'interactive'); assert.equal(welcome.interactive.action.buttons.length, 3);
+  assert.equal(welcome.interactive.action.buttons[1].reply.id,'md_book');
+  assert.equal(welcome.interactive.action.buttons[1].reply.title,'Book consultation');
+  const resetMenu=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_RESET);
+  assert.deepEqual(Array.from(resetMenu.action.buttons,b=>b.reply.id),['md_symptoms','md_book','md_more']);
   assert.equal(welcome.interactive.header.image.link, 'https://mobiledoc247.com/whatsapp/getting-started.png');
   assert.ok(welcome.interactive.body.text.length <= 1024);
   for (const button of welcome.interactive.action.buttons) assert.ok(button.reply.title.length <= 20);

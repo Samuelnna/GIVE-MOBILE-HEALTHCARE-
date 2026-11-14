@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkoutUser, paymentClient } from '../../../lib/consultation-checkout';
-import { supportEnabled } from '../../../lib/whatsapp-support';
+import { supportEnabled, supportDisabledReason } from '../../../lib/whatsapp-support';
 import { decryptReminder, encryptReminder } from '../../../lib/whatsapp-reminder-core';
 import { sendWhatsAppReply } from '../../../lib/whatsapp';
 export const runtime = 'nodejs';
@@ -19,7 +19,7 @@ async function handle(request: NextRequest) {
     const {data:member,error:memberError}=await db.from('whatsapp_support_staff_members').select('display_name,active').eq('user_id',user.id).maybeSingle();
     if(memberError||!member?.active) return json({error:'An authorised support staff account is required.'},403);
     if(request.method==='GET'&&request.nextUrl.searchParams.get('access')==='true') return json({staff:{name:member.display_name}});
-    if(!supportEnabled()) return json({error:'Support inbox is not enabled. Complete WHATSAPP_SUPPORT_SETUP.md first.'},503);
+    if(!supportEnabled()) return json({error:supportDisabledReason()},503);
     const rpc=async(action:string, key?:string,extra:Record<string,unknown>={})=>{
       const {data,error}=await db.rpc('whatsapp_support_staff',{action,actor:user.id,thread_key:key||null,...extra});
       if(error) throw new Error(error.code==='PGRST202'?'Support SQL setup is missing.': 'Support action unavailable. Refresh the inbox; check assignment, reply window or delivery in progress.');

@@ -2,7 +2,13 @@ import 'server-only';
 import { encryptReminder } from './whatsapp-reminder-core';
 import type { IncomingMessage } from './whatsapp';
 
-export function supportEnabled() { return process.env.WHATSAPP_SUPPORT_ENABLED === 'true'; }
+export function supportEnabled() { return process.env.WHATSAPP_SUPPORT_ENABLED?.trim().toLowerCase() === 'true'; }
+export function supportDisabledReason() {
+  const value=process.env.WHATSAPP_SUPPORT_ENABLED?.trim().toLowerCase();
+  if(!value) return 'The live server is missing WHATSAPP_SUPPORT_ENABLED. In the Netlify site serving this domain, set it to true for Production with Functions scope (or All scopes), then publish a new deploy.';
+  if(value==='false') return 'The live server has WHATSAPP_SUPPORT_ENABLED set to false. Set the Production value to true in Netlify and publish a new deploy.';
+  return 'The live server received an invalid WHATSAPP_SUPPORT_ENABLED value. Use only true, without quotation marks, then publish a new deploy.';
+}
 export function supportControl(text: string) {
   if (/^(?:human|support|talk to (?:a )?human|talk to (?:your |the |our )?team)$/i.test(text.trim())) return 'human';
   if (/^(?:bot|resume (?:ai|bot)|\/?reset|\/?start|new assessment)$/i.test(text.trim())) return 'bot';

@@ -80,6 +80,7 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   const saved=operations[1].changes.create_reminder;assert.ok(saved.next_due);assert.equal(reminderContext.exports.decryptReminder(saved.payload).to,message.from);
   assert.equal(operations[1].clear_history,true);
   reset();await handle({...message,text:'BOOK'});assert.equal(generated.length,0);assert.match(replies[0].reply,/NGN 1,000/);assert.match(replies[0].reply,/care=doctors/);
+  reset();await handle({...message,text:'BOOK',selection:'md_book'});assert.equal(generated.length,0);assert.match(replies[0].reply,/NGN 1,000/);
   reset();await handle({...message,text:'HUMAN'});assert.match(replies[0].reply,/not available yet/);assert.equal(generated.length,0);
   env.WHATSAPP_SUPPORT_ENABLED='true';
   reset();await handle({...message,text:'HUMAN'});assert.match(replies[0].reply,/YES SUPPORT/);assert.equal(operations[1].changes.support_request,undefined);
@@ -87,6 +88,11 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   reset();claim.state='support_captured';await handle({...message,text:'I need booking help'});assert.equal(generated.length,0);assert.equal(replies.length,0);assert.equal(operations.length,1);assert.equal(reminderContext.exports.decryptReminder(operations[0].changes.support_payload).text,'I need booking help');
   reset();await handle({...message,text:'BOT'});assert.equal(operations[0].changes.control,'bot');assert.match(replies[0].reply,/back with/);assert.equal(generated.length,0);
   reset();await handle({...message,text:'STOP'});assert.equal(operations[0].changes.control,'stop');assert.equal(operations[1].changes.consent,'revoke');
+  env.WHATSAPP_SUPPORT_ENABLED=' TRUE ';assert.equal(supportContext.exports.supportEnabled(),true);
+  reset();await handle({...message,text:'HUMAN'});assert.match(replies[0].reply,/YES SUPPORT/);
+  delete env.WHATSAPP_SUPPORT_ENABLED;assert.equal(supportContext.exports.supportEnabled(),false);assert.match(supportContext.exports.supportDisabledReason(),/missing WHATSAPP_SUPPORT_ENABLED/);
+  env.WHATSAPP_SUPPORT_ENABLED='false';assert.match(supportContext.exports.supportDisabledReason(),/set to false/);
+  env.WHATSAPP_SUPPORT_ENABLED='"true"';assert.equal(supportContext.exports.supportEnabled(),false);assert.match(supportContext.exports.supportDisabledReason(),/invalid/);
   env.WHATSAPP_SUPPORT_ENABLED='false';
   reset(); generationFail = true; await assert.rejects(() => handle(message), /GEMINI_HTTP_429/); assert.equal(operations.at(-1).operation, 'release'); assert.equal(replies.length, 0);
   reset(); sendFail = true; await assert.rejects(() => handle(message), /WHATSAPP_HTTP_500/); assert.equal(operations[1].operation, 'prepare'); assert.equal(operations.at(-1).operation, 'release');

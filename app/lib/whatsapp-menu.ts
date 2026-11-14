@@ -18,8 +18,8 @@ export const WHATSAPP_CONSENT = "👋 Hi there! I'm MobileDoc, your friendly AI 
 export const WHATSAPP_DECLINED = 'No problem. AI chat is paused and any saved reminders have been cancelled. You can use https://mobiledoc247.com for care. Send HELLO if you want to review consent again.';
 export const WHATSAPP_HANDOFF = 'Let’s continue your care at https://mobiledoc247.com — sign in to choose a healthcare professional. This chat gives brief guidance, not a diagnosis.\n\nIf you may be in immediate danger, seek emergency care now rather than waiting for an online consultation. You can still send MENU to manage reminders.';
 export const WHATSAPP_MORE = '*More ways MobileDoc can help*\nChoose below, or continue your care at https://mobiledoc247.com\n\nMedication reminders repeat only the schedule you enter. STOP REMINDERS cancels them.';
-export const WHATSAPP_WELCOME = "😊 *Welcome to MobileDoc!*\nI'm glad you're here. How can I help you today?\n\nTell me how you're feeling, ask a health question, or choose an option below. We can take it one step at a time.";
-export const WHATSAPP_RESET = "All fresh 😊 Your earlier chat has been cleared.\n\nHow can I help you today?";
+export const WHATSAPP_WELCOME = "😊 *Welcome to MobileDoc!*\nI'm glad you're here. How can I help you today?\n\nTell me how you're feeling, ask a health question, or book a consultation below. We can take it one step at a time.";
+export const WHATSAPP_RESET = "All fresh 😊 Your earlier chat has been cleared.\n\nHow can I help you today? Choose below to check symptoms or book a consultation. More options includes doctors, reminders and our support team.";
 export const WHATSAPP_SYMPTOMS = "I'm here to help 😊 What symptoms are you experiencing?\n\nYou can tell me in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa.";
 export const WHATSAPP_QUESTION = "Of course 😊 Ask your health question, and we'll talk it through.";
 export const WHATSAPP_DOCTOR = '*Let\u2019s find the right doctor for you*\n\nWhat would you like help with, or which specialist are you looking for? I can suggest a suitable doctor from our network.\n\nYou can also browse and book here: https://mobiledoc247.com/?care=doctors\n\nI haven\u2019t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care.';
@@ -55,7 +55,7 @@ export function whatsappInteractiveReply(text: string) {
   const mainMenu = text === WHATSAPP_WELCOME || text.startsWith(WHATSAPP_WELCOME + '\n\n') ||
     text === WHATSAPP_RESET || text.startsWith(WHATSAPP_RESET + '\n\n');
   if (mainMenu) return { type: 'button', header: { type: 'image', image: { link: 'https://mobiledoc247.com/whatsapp/getting-started.png' } },
-    body: { text: text.slice(0,1024) },footer:{text:'MobileDoc • AI health guidance'},action:{buttons:buttons(['md_symptoms','md_doctor','md_more'])} };
+    body: { text: text.slice(0,1024) },footer:{text:'MobileDoc • AI health guidance'},action:{buttons:buttons(['md_symptoms','md_book','md_more'])} };
   if (text!==WHATSAPP_MORE && text !== WHATSAPP_DOCTOR && !text.startsWith(WHATSAPP_DOCTOR + '\n\n')) return undefined;
   return {
     type: 'list',
