@@ -7,9 +7,12 @@ vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-menu.ts'
 const env = { WHATSAPP_APP_SECRET: 'secret', WHATSAPP_PHONE_NUMBER_ID: '12345', NEXT_PUBLIC_SUPABASE_URL: 'https://test.invalid', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
 const reminderContext={exports:{},process:{env},Buffer,require};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-core.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,reminderContext);
+const supportContext={exports:{},process:{env},require(name){return name==='server-only'?{}:name==='./whatsapp-reminder-core'?reminderContext.exports:require(name)}};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-support.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,supportContext);
 const context = { exports: {}, process: { env }, require(name) {
   if (name === 'server-only') return {};
   if (name === 'node:crypto') return require(name);
+  if (name === './whatsapp-support') return supportContext.exports;
   if (name === './whatsapp-menu') return menuContext.exports;
   if (name === './whatsapp-reminder-core') return reminderContext.exports;
   if (name === '@supabase/supabase-js') return { createClient: () => ({ rpc: async (_name, args) => {
@@ -76,6 +79,15 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   assert.equal(generated.length,0);assert.equal(operations[1].changes.wizard,null);
   const saved=operations[1].changes.create_reminder;assert.ok(saved.next_due);assert.equal(reminderContext.exports.decryptReminder(saved.payload).to,message.from);
   assert.equal(operations[1].clear_history,true);
+  reset();await handle({...message,text:'BOOK'});assert.equal(generated.length,0);assert.match(replies[0].reply,/NGN 1,000/);assert.match(replies[0].reply,/care=doctors/);
+  reset();await handle({...message,text:'HUMAN'});assert.match(replies[0].reply,/not available yet/);assert.equal(generated.length,0);
+  env.WHATSAPP_SUPPORT_ENABLED='true';
+  reset();await handle({...message,text:'HUMAN'});assert.match(replies[0].reply,/YES SUPPORT/);assert.equal(operations[1].changes.support_request,undefined);
+  reset();await handle({...message,text:'YES SUPPORT'});assert.ok(operations[1].changes.support_request);assert.match(replies[0].reply,/queue/);assert.equal(operations[1].clear_history,true);
+  reset();claim.state='support_captured';await handle({...message,text:'I need booking help'});assert.equal(generated.length,0);assert.equal(replies.length,0);assert.equal(operations.length,1);assert.equal(reminderContext.exports.decryptReminder(operations[0].changes.support_payload).text,'I need booking help');
+  reset();await handle({...message,text:'BOT'});assert.equal(operations[0].changes.control,'bot');assert.match(replies[0].reply,/back with/);assert.equal(generated.length,0);
+  reset();await handle({...message,text:'STOP'});assert.equal(operations[0].changes.control,'stop');assert.equal(operations[1].changes.consent,'revoke');
+  env.WHATSAPP_SUPPORT_ENABLED='false';
   reset(); generationFail = true; await assert.rejects(() => handle(message), /GEMINI_HTTP_429/); assert.equal(operations.at(-1).operation, 'release'); assert.equal(replies.length, 0);
   reset(); sendFail = true; await assert.rejects(() => handle(message), /WHATSAPP_HTTP_500/); assert.equal(operations[1].operation, 'prepare'); assert.equal(operations.at(-1).operation, 'release');
   reset(); memoryFail = true; await assert.rejects(() => handle(message), /MEMORY_SETUP_REQUIRED/); assert.equal(generated.length, 0);

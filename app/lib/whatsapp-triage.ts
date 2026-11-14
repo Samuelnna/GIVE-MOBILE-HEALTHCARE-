@@ -1,4 +1,5 @@
 import 'server-only';
+import { supportEnabled, supportControl, supportCapture, SUPPORT_REQUEST, SUPPORT_WAITING, SUPPORT_UNAVAILABLE, BOOK_REPLY } from './whatsapp-support';
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, randomUUID } from 'node:crypto';
 import { generateWhatsAppReply, sendWhatsAppReply, type IncomingMessage, type TriageMessage } from './whatsapp';
@@ -21,14 +22,16 @@ function memoryClient() {
 export async function handleWhatsAppTriage(message: IncomingMessage) {
   const db = memoryClient(), session_key = whatsappConversationKey(message.from), lease_id = randomUUID();
   const turn = async (operation: string, extra: Record<string, unknown> = {}) => {
-    const { data, error } = await db.rpc('whatsapp_engagement_turn', {
+    const { data, error } = await db.rpc(supportEnabled() ? 'whatsapp_support_turn' : 'whatsapp_engagement_turn', {
       operation, session_key, inbound_id: message.id, lease_id, ...extra,
     });
     if (error) throw new Error(error.code === 'PGRST202' || error.code === '42P01' ? 'WHATSAPP_MEMORY_SETUP_REQUIRED' : 'WHATSAPP_MEMORY_FAILED');
     return data;
   };
   const control=/^(?:stop|forget me|no thanks)$/i.test(message.text.trim())||message.selection==='md_decline'?'stop':/^stop reminders$/i.test(message.text.trim())?'stop_reminders':null;
-  const state = await turn('claim',control?{changes:{control}}:{});
+  const assistance = message.selection==='md_support'?'human':supportControl(message.text);
+  const state = await turn('claim', supportEnabled() ? {changes:{...supportCapture(message), ...(control ? {control} : assistance ? {control:assistance} : {})}} : control ? {changes:{control}} : {});
+  if (state?.state === 'support_captured') return;
   if (state?.state === 'sent') return;
   if (state?.state !== 'claimed') throw new Error('WHATSAPP_CONVERSATION_BUSY');
   try {
@@ -49,6 +52,15 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
         if (message.selection==='md_consent' || /^yes,? continue$/i.test(text)) {
           changes.consent='accept'; reply=WHATSAPP_WELCOME;
         } else reply=WHATSAPP_CONSENT;
+      } else if (assistance === 'human') {
+        reply=supportEnabled()?SUPPORT_REQUEST:SUPPORT_UNAVAILABLE;
+      } else if (/^yes support$/i.test(text)) {
+        if (supportEnabled()) { reply=SUPPORT_WAITING; clear=true; changes.wizard=null; changes.support_request=encryptReminder({to:message.from}); changes.support_at=new Date(message.timestamp).toISOString(); }
+        else reply=SUPPORT_UNAVAILABLE;
+      } else if (assistance === 'bot') {
+        reply=navigation?.reset ? navigation.text : "You're back with the MobileDoc AI assistant. How can I help?"; clear=true; changes.wizard=null;
+      } else if (message.selection==='md_book' || /^(?:book|book (?:a )?(?:consultation|appointment))$/i.test(text)) {
+        reply=BOOK_REPLY;changes.wizard=null;
       } else if (navigation?.reset) {
         reply=navigation.text+(Number(state.reminder_count)>0?'\n\nYour reminders are still on. Send STOP REMINDERS if you want to cancel them.':'');
         clear=true; changes.wizard=null;

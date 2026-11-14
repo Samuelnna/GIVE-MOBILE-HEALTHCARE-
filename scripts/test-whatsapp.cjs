@@ -76,7 +76,7 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.match(consent.body.text,/Your privacy is our top priority\.\nShall we get you set up\?/);
   assert.equal(consent.body.text.includes('https://'),false);
   const more=menuContext.exports.whatsappInteractiveReply(menuContext.exports.WHATSAPP_MORE);
-  assert.equal(more.type,'list');assert.equal(more.action.sections[0].rows.length,4);assert.ok(more.action.sections[0].rows.some(row=>row.id==='md_reminder'));
+  assert.equal(more.type,'list');assert.equal(more.action.sections[0].rows.length,6);assert.ok(more.action.sections[0].rows.some(row=>row.id==='md_reminder'));
   assert.equal(menuContext.exports.menuReply('hello I have severe chest pain'), undefined);
   assert.equal(menuContext.exports.whatsappInteractiveReply('Seek immediate emergency care.'), undefined);
   assert.equal(menuContext.exports.menuReply('MENU').reset, false);

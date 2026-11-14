@@ -7,6 +7,8 @@ export const WHATSAPP_CHOICES = {
   md_reminder: { title: 'Medication reminders', text: 'Medication reminders' },
   md_reminder_confirm: { title: 'Confirm reminders', text: 'CONFIRM REMINDERS' },
   md_reminder_cancel: { title: 'Cancel setup', text: 'CANCEL' },
+  md_book: { title: 'Book consultation', text: 'BOOK' },
+  md_support: { title: 'Talk to our team', text: 'HUMAN' },
   md_more: { title: 'More options', text: 'More options' },
 } as const;
 export type WhatsAppChoice = keyof typeof WHATSAPP_CHOICES;
@@ -60,7 +62,7 @@ export function whatsappInteractiveReply(text: string) {
     header: { type: 'text', text: 'MobileDoc | Your next step' },
     body: { text: text.slice(0, 1024) },
     footer: { text: 'MobileDoc • AI health guidance' },
-    action: { button: 'Choose an option', sections: [{ title: 'How can we help?', rows: (['md_symptoms','md_question','md_doctor','md_reminder'] as WhatsAppChoice[])
-      .map(id => ({ id, title: WHATSAPP_CHOICES[id].title, description: id==='md_reminder' ? 'Set or cancel your own medication schedule' : id==='md_doctor' ? 'Continue on mobiledoc247.com' : id==='md_symptoms' ? 'A few focused questions, then next steps' : 'A brief explanation, with links to care' })) }] },
+    action: { button: 'Choose an option', sections: [{ title: 'How can we help?', rows: (['md_symptoms','md_question','md_doctor','md_reminder','md_book','md_support'] as WhatsAppChoice[])
+      .map(id => ({ id, title: WHATSAPP_CHOICES[id].title, description: id==='md_book' ? 'Choose a doctor and use secure site checkout' : id==='md_support' ? 'Request help with bookings or our services' : id==='md_reminder' ? 'Set or cancel your own medication schedule' : id==='md_doctor' ? 'Continue on mobiledoc247.com' : id==='md_symptoms' ? 'A few focused questions, then next steps' : 'A brief explanation, with links to care' })) }] },
   };
 }
