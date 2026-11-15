@@ -661,6 +661,9 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
   };
 
   const displayPayments = dbPayments.length > 0 ? dbPayments : initialPayments;
+  const consultationPayments = displayPayments.filter(payment =>
+    ['doctor_consultation', 'professional_consultation'].includes(payment.payment_type)
+  );
 
   const handleCreateProviderWithPayout = async (table: string, values: any, businessType: 'lab' | 'pharmacy' | 'hospital') => {
     setIsCreatingSubaccount(true);
@@ -1176,16 +1179,34 @@ const AdminDashboard: React.FC<{ allPayments?: any[] }> = ({ allPayments: initia
         {/* Payment History Tracking */}
         <AdminPanel section="payments">
 <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-            <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">Financial Transactions (Payments)</h3>
+            <div className="mb-5 border-b pb-4">
+                <h3 className="text-xl font-bold text-slate-800">Consultation follow-up</h3>
+                <p className="mt-1 text-sm text-slate-500">Use this queue to confirm a paid consultation, contact the selected doctor and patient, and make sure a booking is completed. A payment alone does not create an appointment.</p>
+            </div>
+            {consultationPayments.length > 0 && <div className="mb-7 grid gap-4 xl:grid-cols-2">
+                {consultationPayments.slice(0, 12).map(payment => {
+                    const confirmed = ['successful', 'completed'].includes(String(payment.status).toLowerCase());
+                    const doctorName = payment.doctor?.full_name || payment.details?.professional_name || 'Selected professional';
+                    const patientName = payment.patient?.full_name || payment.profiles?.full_name || 'Patient';
+                    return <article key={payment.id} className={`rounded-xl border p-4 ${confirmed ? 'border-emerald-200 bg-emerald-50/40' : 'border-amber-200 bg-amber-50/40'}`}>
+                        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-bold text-slate-800">{patientName}</p><p className="text-xs text-slate-500">{payment.patient?.email || payment.details?.customer_email || 'No email recorded'}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${confirmed ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-800'}`}>{confirmed ? 'Payment verified' : 'Payment not verified'}</span></div>
+                        <dl className="mt-4 grid gap-2 text-sm"><div><dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Talk to</dt><dd className="font-semibold text-slate-700">{doctorName}</dd><dd className="text-xs text-slate-500">{payment.doctor?.email || 'Doctor email unavailable'}</dd></div><div><dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Booking</dt><dd className="text-slate-700">{payment.appointment ? `${payment.appointment.date} at ${String(payment.appointment.time).slice(0, 5)} · ${payment.appointment.type} · ${payment.appointment.status}` : confirmed ? 'Payment is verified, but the patient has not completed appointment details.' : 'Do not arrange care yet: confirm the payment first.'}</dd></div><div><dt className="text-xs font-bold uppercase tracking-wide text-slate-400">Reference</dt><dd className="font-mono text-xs text-slate-500">{payment.tx_ref}</dd></div></dl>
+                        <div className="mt-4 flex flex-wrap gap-2">{payment.patient?.email || payment.details?.customer_email ? <a href={`mailto:${payment.patient?.email || payment.details?.customer_email}`} className="rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Email patient</a> : null}{payment.doctor?.email ? <a href={`mailto:${payment.doctor.email}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700">Email doctor</a> : null}</div>
+                    </article>;
+                })}
+            </div>}
+            {!paymentLoadError && consultationPayments.length === 0 && <p className="mb-7 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">No consultation checkouts recorded yet.</p>}
+            <h3 className="text-xl font-bold text-slate-800 mb-4 border-b pb-2">All financial transactions</h3>
             <button onClick={() => void fetchPayments()} className="mb-4 px-3 py-2 rounded-lg bg-sky-50 text-sky-700 text-sm font-bold">Refresh payments</button>
             {paymentLoadError && <p className="text-center py-4 text-red-600">Payment records could not be loaded: {paymentLoadError}</p>}
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
-                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">User</th><th className="pb-2">Amount</th><th className="pb-2">Type</th><th className="pb-2">Reference</th><th className="pb-2">Split</th><th className="pb-2">Status</th></tr></thead>
+                    <thead><tr className="border-b text-[10px] uppercase text-slate-400 font-bold"><th className="pb-2">User</th><th className="pb-2">Selected doctor</th><th className="pb-2">Amount</th><th className="pb-2">Type</th><th className="pb-2">Reference</th><th className="pb-2">Split</th><th className="pb-2">Status</th></tr></thead>
                     <tbody className="divide-y divide-slate-100">
                         {displayPayments.map(p => (
                             <tr key={p.id}>
                                 <td className="py-3 font-bold text-slate-700">{p.profiles?.full_name}</td>
+                                <td className="py-3 text-slate-600">{p.doctor?.full_name || p.details?.professional_name || '—'}</td>
                                 <td className="py-3 font-bold text-emerald-600">₦{Number(p.amount).toLocaleString()}</td>
                                 <td className="py-3 capitalize text-slate-500">{p.payment_type.replace('_', ' ')}</td>
                                 <td className="py-3 font-mono text-[10px] text-slate-400">
