@@ -32,6 +32,10 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   assert.equal(api.validWhatsAppSignature(raw, signature, ''), false);
   assert.equal(api.incomingWhatsAppMessages(payload, '123456').length, 1);
   assert.equal(api.incomingWhatsAppMessages(payload, 'another').length, 0);
+  assert.equal(menuContext.exports.WHATSAPP_CHOICES.md_doctor.title,'Talk to a doctor');
+  assert.ok(menuContext.exports.menuReply('Find a doctor'));
+  assert.ok(menuContext.exports.menuReply('Talk to a doctor'));
+  assert.match(menuContext.exports.BOOKING_INVITATION,/audio\/video/);
   const value = payload.entry[0].changes[0].value;
   value.messages = [{ ...message, type: 'image' }]; assert.equal(api.incomingWhatsAppMessages(payload, '123456').length, 0);
   value.messages = [{ ...message, timestamp: '1' }]; assert.equal(api.incomingWhatsAppMessages(payload, '123456').length, 0);
@@ -90,7 +94,7 @@ const payload = { object: 'whatsapp_business_account', entry: [{ changes: [{ fie
   for (const level of ['Routine', 'Urgent', 'Emergency']) {
     context.fetch = async () => ({ ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ triageLevel: level, symptomSummary: 'Skin concern', recommendedAction: 'Seek suitable care', doctorSpecialty: 'Dermatology', referrals: [{ type: 'Doctor', reason: 'Assessment' }] }) }] } }] }) });
     const routed = await api.generateWhatsAppReply('Please help me find a doctor');
-    assert.equal(routed.includes('Directory link'), level !== 'Emergency');
+    assert.equal(routed.includes('Directory link'), level !== 'Emergency');assert.equal(routed.includes('NGN 1,000'),level!=='Emergency');assert.equal(routed.includes('medication discount'),false);
   }
   context.fetch = async () => ({ ok: false, status: 401 });
   await assert.rejects(() => api.sendWhatsAppReply(message.from, message.id, 'hello'), /WHATSAPP_HTTP_401/);

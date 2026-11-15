@@ -3,7 +3,7 @@ export const WHATSAPP_CHOICES = {
   md_decline: { title: 'No thanks', text: 'No thanks' },
   md_symptoms: { title: 'Check symptoms', text: 'Check symptoms' },
   md_question: { title: 'Ask health question', text: 'Ask a health question' },
-  md_doctor: { title: 'Find a doctor', text: 'Find a doctor' },
+  md_doctor: { title: 'Talk to a doctor', text: 'Talk to a doctor' },
   md_reminder: { title: 'Medication reminders', text: 'Medication reminders' },
   md_reminder_confirm: { title: 'Confirm reminders', text: 'CONFIRM REMINDERS' },
   md_reminder_cancel: { title: 'Cancel setup', text: 'CANCEL' },
@@ -14,7 +14,7 @@ export const WHATSAPP_CHOICES = {
 export type WhatsAppChoice = keyof typeof WHATSAPP_CHOICES;
 
 export const WHATSAPP_PRIVACY_NOTICE = 'Recent messages are kept for follow-up for up to 24 hours of inactivity. Send RESET to clear this conversation. Avoid sharing identifying details.';
-export const WHATSAPP_CONSENT = "👋 Hi there! I'm MobileDoc, your friendly AI health assistant on WhatsApp.\n\nI can help you:\n✅ Understand your symptoms\n✅ Get answers to health questions\n✅ Set your medication reminders\n✅ Find a doctor through MobileDoc\n\nYour privacy is our top priority.\nShall we get you set up?";
+export const WHATSAPP_CONSENT = "👋 Hi there! I'm MobileDoc, your friendly AI health assistant on WhatsApp.\n\nI can help you:\n✅ Understand your symptoms\n✅ Get answers to health questions\n✅ Set your medication reminders\n✅ Talk to a doctor through MobileDoc\n\nYour privacy is our top priority.\nShall we get you set up?";
 export const WHATSAPP_DECLINED = 'No problem. AI chat is paused and any saved reminders have been cancelled. You can use https://mobiledoc247.com for care. Send HELLO if you want to review consent again.';
 export const WHATSAPP_HANDOFF = 'Let’s continue your care at https://mobiledoc247.com — sign in to choose a healthcare professional. This chat gives brief guidance, not a diagnosis.\n\nIf you may be in immediate danger, seek emergency care now rather than waiting for an online consultation. You can still send MENU to manage reminders.';
 export const WHATSAPP_MORE = '*More ways MobileDoc can help*\nChoose below, or continue your care at https://mobiledoc247.com\n\nMedication reminders repeat only the schedule you enter. STOP REMINDERS cancels them.';
@@ -22,7 +22,7 @@ export const WHATSAPP_WELCOME = "😊 *Welcome to MobileDoc!*\nI'm glad you're h
 export const WHATSAPP_RESET = "All fresh 😊 Your earlier chat has been cleared.\n\nHow can I help you today? Choose below to check symptoms or book a consultation. More options includes doctors, reminders and our support team.";
 export const WHATSAPP_SYMPTOMS = "I'm here to help 😊 What symptoms are you experiencing?\n\nYou can tell me in English, Nigerian Pidgin, Yoruba, Igbo, or Hausa.";
 export const WHATSAPP_QUESTION = "Of course 😊 Ask your health question, and we'll talk it through.";
-export const WHATSAPP_DOCTOR = '*Let\u2019s find the right doctor for you*\n\nWhat would you like help with, or which specialist are you looking for? I can suggest a suitable doctor from our network.\n\nYou can also browse and book here: https://mobiledoc247.com/?care=doctors\n\nI haven\u2019t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care.';
+export const WHATSAPP_DOCTOR = '*Talk to a doctor with MobileDoc*\n\nAn audio/video consultation lets you discuss your concerns, ask questions and get advice on next steps. The consultation fee is NGN 1,000.\n\nWhat would you like help with, or which specialist are you looking for? I can suggest a suitable doctor from our network.\n\nYou can also browse and book here: https://mobiledoc247.com/?care=doctors\n\nI haven\u2019t booked or contacted anyone. If you are seriously unwell, seek immediate in-person care.';
 
 export function knownWhatsAppChoice(value: unknown): WhatsAppChoice | undefined {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(WHATSAPP_CHOICES, value)
@@ -34,6 +34,7 @@ export function menuReply(text: string, selection?: WhatsAppChoice) {
   if (/^(?:\/?menu|\/?help|hello[!. ]*|hi[!. ]*|hey[!. ]*|good (?:morning|afternoon|evening)[!. ]*|how it works|how does (?:it|this) work\??)$/i.test(text.trim())) {
     return { text: WHATSAPP_WELCOME, reset: false };
   }
+  if (/^find (?:a )?doc(?:tor)?$/i.test(text.trim())) return {text:WHATSAPP_DOCTOR,reset:false};
   const choice = selection || (Object.keys(WHATSAPP_CHOICES) as WhatsAppChoice[])
     .find(id => [WHATSAPP_CHOICES[id].text.toLowerCase(), WHATSAPP_CHOICES[id].title.toLowerCase()].includes(text.trim().toLowerCase()));
   if (choice === 'md_symptoms') return { text: WHATSAPP_SYMPTOMS, reset: false };
@@ -66,3 +67,5 @@ export function whatsappInteractiveReply(text: string) {
       .map(id => ({ id, title: WHATSAPP_CHOICES[id].title, description: id==='md_book' ? 'Choose a doctor and use secure site checkout' : id==='md_support' ? 'Request help with bookings or our services' : id==='md_reminder' ? 'Set or cancel your own medication schedule' : id==='md_doctor' ? 'Continue on mobiledoc247.com' : id==='md_symptoms' ? 'A few focused questions, then next steps' : 'A brief explanation, with links to care' })) }] },
   };
 }
+
+export const BOOKING_INVITATION = "*Talk to a doctor*\nA MobileDoc audio/video consultation lets you discuss your symptoms, ask questions, and get advice on treatment and next steps, including whether tests are needed.\n\nThe consultation fee is NGN 1,000. Reply BOOK to choose a doctor and complete your booking on our secure website. Availability is shown on the site.";

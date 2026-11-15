@@ -1,4 +1,5 @@
 import 'server-only';
+import { bookingFollowupsEnabled, FOLLOWUP_OFFER, followupCancellation, routineDoctorRecommendation } from './whatsapp-booking-followup';
 import { supportEnabled, supportControl, supportCapture, SUPPORT_REQUEST, SUPPORT_WAITING, SUPPORT_UNAVAILABLE, BOOK_REPLY } from './whatsapp-support';
 import { createClient } from '@supabase/supabase-js';
 import { createHmac, randomUUID } from 'node:crypto';
@@ -22,15 +23,16 @@ function memoryClient() {
 export async function handleWhatsAppTriage(message: IncomingMessage) {
   const db = memoryClient(), session_key = whatsappConversationKey(message.from), lease_id = randomUUID();
   const turn = async (operation: string, extra: Record<string, unknown> = {}) => {
-    const { data, error } = await db.rpc(supportEnabled() ? 'whatsapp_support_turn' : 'whatsapp_engagement_turn', {
-      operation, session_key, inbound_id: message.id, lease_id, ...extra,
+    const { data, error } = await db.rpc(bookingFollowupsEnabled() ? 'whatsapp_booking_followup_turn' : supportEnabled() ? 'whatsapp_support_turn' : 'whatsapp_engagement_turn', {
+      operation, session_key, inbound_id: message.id, lease_id, ...extra, ...(bookingFollowupsEnabled()?{changes:{...(extra.changes as Record<string,unknown>||{}),support_enabled:supportEnabled(),followup_inbound_at:new Date(message.timestamp).toISOString()}}:{}),
     });
     if (error) throw new Error(error.code === 'PGRST202' || error.code === '42P01' ? 'WHATSAPP_MEMORY_SETUP_REQUIRED' : 'WHATSAPP_MEMORY_FAILED');
     return data;
   };
   const control=/^(?:stop|forget me|no thanks)$/i.test(message.text.trim())||message.selection==='md_decline'?'stop':/^stop reminders$/i.test(message.text.trim())?'stop_reminders':null;
+  const cancelFollowup=followupCancellation(message.text);
   const assistance = message.selection==='md_support'?'human':supportControl(message.text);
-  const state = await turn('claim', supportEnabled() ? {changes:{...supportCapture(message), ...(control ? {control} : assistance ? {control:assistance} : {})}} : control ? {changes:{control}} : {});
+  const state = await turn('claim', supportEnabled() ? {changes:{...supportCapture(message), ...(control ? {control} : assistance ? {control:assistance} : cancelFollowup?{control:'cancel_followup'}:{})}} : control ? {changes:{control}} : cancelFollowup?{changes:{control:'cancel_followup'}}:{});
   if (state?.state === 'support_captured') return;
   if (state?.state === 'sent') return;
   if (state?.state !== 'claimed') throw new Error('WHATSAPP_CONVERSATION_BUSY');
@@ -52,6 +54,12 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
         if (message.selection==='md_consent' || /^yes,? continue$/i.test(text)) {
           changes.consent='accept'; reply=WHATSAPP_WELCOME;
         } else reply=WHATSAPP_CONSENT;
+      } else if (cancelFollowup) {
+        reply="Understood. I won't send a booking check-in. You can still ask me health questions or type HUMAN for help.";changes.followup_cancel=true;
+      } else if (/^check[ -]?in$/i.test(text)) {
+        if(!bookingFollowupsEnabled())reply='Booking check-ins are not available yet. You can type BOOK whenever you want to choose a doctor.';
+        else if(!state.followup_eligible)reply="There isn't a recent routine-care check-in offer to confirm, or you've already requested one this week. You can type BOOK or HUMAN for help.";
+        else {changes.followup_request=encryptReminder({to:message.from});reply="Okay, I'll send one booking check-in in about 6 hours if it's still appropriate and within WhatsApp's reply window. Send STOP FOLLOWUPS to cancel. If your symptoms worsen, seek care instead of waiting for this message.";}
       } else if (assistance === 'human') {
         reply=supportEnabled()?SUPPORT_REQUEST:SUPPORT_UNAVAILABLE;
       } else if (/^yes support$/i.test(text)) {
@@ -96,7 +104,12 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
       } else {
         reply=await generateWhatsAppReply(message.text,history);
         changes.ai_used=true;
+        if(bookingFollowupsEnabled()){
+          if(routineDoctorRecommendation(reply)){changes.followup_offer=true;reply+='\n\n'+FOLLOWUP_OFFER;}
+          else if(/^\*(?:Urgent|Emergency) care\*/.test(reply))changes.followup_cancel=true;
+        }
       }
+      if(message.selection==='md_book'||/^(?:book|book (?:a )?(?:consultation|appointment))$/i.test(text)||assistance||navigation?.reset)changes.followup_cancel=true;
       if(reply.includes('https://mobiledoc247.com')) changes.handoff=true;
       await turn('prepare', { user_text: clear ? '[navigation or consent]' : message.text, reply_text: reply, clear_history: clear, changes });
     }

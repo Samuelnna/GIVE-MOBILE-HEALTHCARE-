@@ -9,9 +9,11 @@ const reminderContext={exports:{},process:{env},Buffer,require};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-reminder-core.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,reminderContext);
 const supportContext={exports:{},process:{env},require(name){return name==='server-only'?{}:name==='./whatsapp-reminder-core'?reminderContext.exports:require(name)}};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-support.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,supportContext);
+const followupContext={exports:{},process:{env},require:()=>({})};vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/lib/whatsapp-booking-followup.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText,followupContext);
 const context = { exports: {}, process: { env }, require(name) {
   if (name === 'server-only') return {};
   if (name === 'node:crypto') return require(name);
+  if (name === './whatsapp-booking-followup') return followupContext.exports;
   if (name === './whatsapp-support') return supportContext.exports;
   if (name === './whatsapp-menu') return menuContext.exports;
   if (name === './whatsapp-reminder-core') return reminderContext.exports;
@@ -94,6 +96,12 @@ function reset() { claim = { state: 'claimed', history: [], consented:true,ai_tu
   env.WHATSAPP_SUPPORT_ENABLED='false';assert.match(supportContext.exports.supportDisabledReason(),/set to false/);
   env.WHATSAPP_SUPPORT_ENABLED='"true"';assert.equal(supportContext.exports.supportEnabled(),false);assert.match(supportContext.exports.supportDisabledReason(),/invalid/);
   env.WHATSAPP_SUPPORT_ENABLED='false';
+  env.WHATSAPP_BOOKING_FOLLOWUPS_ENABLED='true';
+  reset();await handle({...message,text:'CHECK IN'});assert.match(replies[0].reply,/recent routine/);assert.equal(operations[1].changes.followup_request,undefined);
+  reset();claim.followup_eligible=true;await handle({...message,text:'CHECK IN'});assert.ok(operations[1].changes.followup_request);assert.equal(generated.length,0);
+  reset();await handle({...message,text:'BOOK'});assert.equal(operations[1].changes.followup_cancel,true);
+  reset();await handle({...message,text:'STOP FOLLOWUPS'});assert.equal(operations[0].changes.control,'cancel_followup');assert.equal(operations[1].changes.followup_cancel,true);
+  env.WHATSAPP_BOOKING_FOLLOWUPS_ENABLED='false';
   reset(); generationFail = true; await assert.rejects(() => handle(message), /GEMINI_HTTP_429/); assert.equal(operations.at(-1).operation, 'release'); assert.equal(replies.length, 0);
   reset(); sendFail = true; await assert.rejects(() => handle(message), /WHATSAPP_HTTP_500/); assert.equal(operations[1].operation, 'prepare'); assert.equal(operations.at(-1).operation, 'release');
   reset(); memoryFail = true; await assert.rejects(() => handle(message), /MEMORY_SETUP_REQUIRED/); assert.equal(generated.length, 0);
