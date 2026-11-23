@@ -26,7 +26,13 @@ export async function handleWhatsAppTriage(message: IncomingMessage) {
     const { data, error } = await db.rpc(bookingFollowupsEnabled() ? 'whatsapp_booking_followup_turn' : supportEnabled() ? 'whatsapp_support_turn' : 'whatsapp_engagement_turn', {
       operation, session_key, inbound_id: message.id, lease_id, ...extra, ...(bookingFollowupsEnabled()?{changes:{...(extra.changes as Record<string,unknown>||{}),support_enabled:supportEnabled(),followup_inbound_at:new Date(message.timestamp).toISOString()}}:{}),
     });
-    if (error) throw new Error(error.code === 'PGRST202' || error.code === '42P01' ? 'WHATSAPP_MEMORY_SETUP_REQUIRED' : 'WHATSAPP_MEMORY_FAILED');
+    if (error) {
+      // A database error code is safe operational information; never log message text,
+      // phone numbers, session keys, or the database error detail.
+      const databaseCode = typeof error.code === 'string' && /^[A-Z0-9_]{1,32}$/i.test(error.code) ? error.code : 'UNKNOWN';
+      console.error('WhatsApp memory database:', databaseCode);
+      throw new Error(error.code === 'PGRST202' || error.code === '42P01' ? 'WHATSAPP_MEMORY_SETUP_REQUIRED' : 'WHATSAPP_MEMORY_FAILED');
+    }
     return data;
   };
   const control=/^(?:stop|forget me|no thanks)$/i.test(message.text.trim())||message.selection==='md_decline'?'stop':/^stop reminders$/i.test(message.text.trim())?'stop_reminders':null;
