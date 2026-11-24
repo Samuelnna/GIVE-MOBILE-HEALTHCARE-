@@ -5,8 +5,11 @@ export default async () => {
     const result=await runMedicationReminders();
     if(result.configured) console.log('WhatsApp reminder batch',JSON.stringify(result));
     return new Response(JSON.stringify(result),{status:200});
-  } catch {
-    console.error('WhatsApp reminder batch failed; inspect configuration and database setup.');
+  } catch (error) {
+    const code = error instanceof Error && /^[A-Z0-9_]{1,120}$/.test(error.message)
+      ? error.message
+      : 'REMINDER_BATCH_FAILED';
+    console.error('WhatsApp reminder batch failed:', code);
     return new Response('Reminder batch failed',{status:503});
   }
 };
