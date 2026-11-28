@@ -54,7 +54,13 @@ export async function runMedicationReminders() {
         ? error.message : stage==='decrypt'?'REMINDER_DECRYPT_FAILED':'REMINDER_NETWORK_FAILED';
       summary.errors[code]=(summary.errors[code]||0)+1;
       console.error('WhatsApp medication reminder failed',{code});
-      await finish('failed'); summary.failed++; return;
+      await finish('failed');
+      // Preserve a safe operational code for support diagnostics. The value never
+      // includes a recipient, medicine, dose, Meta response body or credentials.
+      const {error:recordError}=await db.from('whatsapp_medication_reminders')
+        .update({last_error:code}).eq('id',job.id);
+      if(recordError) throw new Error('REMINDER_ERROR_RECORD_FAILED');
+      summary.failed++; return;
     }
     // If this write fails after Meta accepts the send, leave the lease intact.
     // Exactly-once outbound delivery cannot be guaranteed across network failures.
